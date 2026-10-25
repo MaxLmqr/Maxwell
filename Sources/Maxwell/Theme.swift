@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Le vert de MaxActivity marque ce qui compte : l'app en cours et les catégories principales.
+/// Le vert de Maxwell marque ce qui compte : l'app en cours et les catégories principales.
 /// Tout le reste reste en gris système, qui suit le mode sombre.
 enum Theme {
     static let accent = adaptive(light: 0x1D9E75, dark: 0x34B88B)

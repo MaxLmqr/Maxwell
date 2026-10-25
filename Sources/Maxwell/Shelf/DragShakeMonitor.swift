@@ -49,7 +49,7 @@ final class DragShakeMonitor {
     /// Pour le prototype : d'où viennent les positions pendant un glisser de fichiers.
     private var eventSamples = 0
     private var polledSamples = 0
-    private let log = Logger(subsystem: "com.max.MaxActivity", category: "Etagere")
+    private let log = Logger(subsystem: "com.max.Maxwell", category: "Etagere")
 
     /// `pollsAutomatically: false` laisse les tests appeler `poll` eux-mêmes.
     init(pointer: PointerState = SystemPointerState(), pollsAutomatically: Bool = true) {
@@ -72,7 +72,7 @@ final class DragShakeMonitor {
         drag = .none
     }
 
-    /// Écoute un type d'événement dans les autres apps comme dans MaxActivity.
+    /// Écoute un type d'événement dans les autres apps comme dans Maxwell.
     private func watch(_ mask: NSEvent.EventTypeMask, _ handler: @escaping @MainActor (NSEvent) -> Void) {
         if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { event in
             MainActor.assumeIsolated { handler(event) }

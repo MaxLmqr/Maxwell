@@ -83,7 +83,7 @@ struct MenuBarView: View {
                 if enabled { try SMAppService.mainApp.register() }
                 else { try SMAppService.mainApp.unregister() }
             } catch {
-                NSLog("MaxActivity login item error: \(error)")
+                NSLog("Maxwell login item error: \(error)")
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
         }
@@ -122,7 +122,7 @@ struct MenuBarView: View {
                 Toggle("Notifications de récap", isOn: $notifier.enabled)
                 Toggle("Lancer au démarrage", isOn: $launchAtLogin)
                 Divider()
-                Button("Quitter MaxActivity") { NSApp.terminate(nil) }
+                Button("Quitter Maxwell") { NSApp.terminate(nil) }
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 13))

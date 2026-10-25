@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.max.MaxActivity</string>
+    <string>com.max.Maxwell</string>
     <key>CFBundleName</key>
-    <string>MaxActivity</string>
+    <string>Maxwell</string>
     <key>CFBundleDisplayName</key>
-    <string>MaxActivity</string>
+    <string>Maxwell</string>
     <key>CFBundleExecutable</key>
-    <string>MaxActivity</string>
+    <string>Maxwell</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundlePackageType</key>

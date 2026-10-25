@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-@testable import MaxActivity
+@testable import Maxwell
 
 @MainActor
 @Suite("Contenu de l'Étagère")

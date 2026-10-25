@@ -1,6 +1,6 @@
-# MaxActivity
+# Maxwell
 
-Mesure le temps que Max passe dans chaque application de son Mac, et en fait des récaps par jour, semaine et mois. Garde aussi des fichiers à portée de main, le temps de les déposer ailleurs.
+L'assistant personnel de Max sur son Mac. Il mesure le temps que Max passe dans chaque application et en fait des récaps par jour, semaine et mois ; il garde aussi des fichiers à portée de main, le temps de les déposer ailleurs.
 
 ## Mesure
 

@@ -2,18 +2,18 @@
 import PackageDescription
 
 let package = Package(
-    name: "MaxActivity",
+    name: "Maxwell",
     platforms: [.macOS("26.0")],
     targets: [
         .executableTarget(
-            name: "MaxActivity",
-            path: "Sources/MaxActivity",
+            name: "Maxwell",
+            path: "Sources/Maxwell",
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .testTarget(
-            name: "MaxActivityTests",
-            dependencies: ["MaxActivity"],
-            path: "Tests/MaxActivityTests"
+            name: "MaxwellTests",
+            dependencies: ["Maxwell"],
+            path: "Tests/MaxwellTests"
         ),
     ]
 )

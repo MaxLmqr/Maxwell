@@ -124,7 +124,7 @@ final class Categorizer: ObservableObject {
             let name = try response.content.value(String.self)
             return categories.first { $0.name == name }
         } catch {
-            NSLog("MaxActivity classification error for \(app.bundleID): \(error)")
+            NSLog("Maxwell classification error for \(app.bundleID): \(error)")
             return nil
         }
     }

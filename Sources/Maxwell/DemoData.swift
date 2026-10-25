@@ -82,7 +82,7 @@ enum DemoData {
     /// Un dossier et trois vrais fichiers (notes, image, facture) dans un dossier temporaire,
     /// pour dessiner l'Étagère avec de vrais aperçus. Le dernier de la liste est sur le dessus de la pile.
     static func shelfFiles() -> [URL] {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("maxactivity-demo-etagere")
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("maxwell-demo-etagere")
         try? FileManager.default.removeItem(at: folder)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 

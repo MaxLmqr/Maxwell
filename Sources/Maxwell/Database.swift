@@ -75,10 +75,12 @@ final class Database {
     static var defaultURL: URL {
         let fm = FileManager.default
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let folder = support.appendingPathComponent("MaxActivity", isDirectory: true)
-        // Reprend les données enregistrées avant le renommage de l'app.
-        let legacy = support.appendingPathComponent("ActivityTracker", isDirectory: true)
-        if !fm.fileExists(atPath: folder.path), fm.fileExists(atPath: legacy.path) {
+        let folder = support.appendingPathComponent("Maxwell", isDirectory: true)
+        // Reprend les données enregistrées sous les anciens noms de l'app.
+        let legacy = ["MaxActivity", "ActivityTracker"]
+            .map { support.appendingPathComponent($0, isDirectory: true) }
+            .first { fm.fileExists(atPath: $0.path) }
+        if !fm.fileExists(atPath: folder.path), let legacy {
             try? fm.moveItem(at: legacy, to: folder)
         }
         return folder.appendingPathComponent("activity.sqlite")
@@ -305,7 +307,7 @@ final class Database {
     private func run(_ sql: String, _ params: [Any], row: ((OpaquePointer) -> Void)? = nil) {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
-            NSLog("MaxActivity SQL error: \(errorMessage)")
+            NSLog("Maxwell SQL error: \(errorMessage)")
             return
         }
         defer { sqlite3_finalize(stmt) }
@@ -321,7 +323,7 @@ final class Database {
         while true {
             let rc = sqlite3_step(stmt)
             if rc == SQLITE_ROW { row?(stmt); continue }
-            if rc != SQLITE_DONE { NSLog("MaxActivity SQL error: \(errorMessage)") }
+            if rc != SQLITE_DONE { NSLog("Maxwell SQL error: \(errorMessage)") }
             break
         }
     }

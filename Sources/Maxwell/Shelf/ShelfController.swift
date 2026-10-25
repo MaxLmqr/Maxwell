@@ -24,7 +24,7 @@ final class ShelfPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Vue hôte qui réagit dès le premier clic, sans attendre que MaxActivity passe au premier plan.
+/// Vue hôte qui réagit dès le premier clic, sans attendre que Maxwell passe au premier plan.
 private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
@@ -33,7 +33,7 @@ private final class FirstClickHostingView<Content: View>: NSHostingView<Content>
 @MainActor
 final class ShelfController: ObservableObject {
     let shelf = Shelf()
-    /// Réglage du menu : une Secousse ouvre l'Étagère. Désactivé, MaxActivity n'écoute plus la souris.
+    /// Réglage du menu : une Secousse ouvre l'Étagère. Désactivé, Maxwell n'écoute plus la souris.
     @Published var opensOnShake: Bool {
         didSet {
             defaults.set(opensOnShake, forKey: Self.opensOnShakeKey)

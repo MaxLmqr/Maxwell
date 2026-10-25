@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import MaxActivity
+@testable import Maxwell
 
 @MainActor
 @Suite("Réglage de l'Étagère")

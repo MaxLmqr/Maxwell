@@ -118,7 +118,7 @@ final class FileDragSourceView: NSView, NSDraggingSource {
 
     func draggingSession(_ session: NSDraggingSession,
                          sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        // Hors de MaxActivity, la destination choisit comme pour un glisser depuis le Finder,
+        // Hors de Maxwell, la destination choisit comme pour un glisser depuis le Finder,
         // corbeille comprise. Reposer les fichiers sur l'Étagère elle-même n'a pas de sens.
         context == .outsideApplication ? [.copy, .move, .generic, .delete] : []
     }

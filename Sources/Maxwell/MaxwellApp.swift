@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct MaxActivityApp: App {
+struct MaxwellApp: App {
     private let model = AppModel.shared
 
     var body: some Scene {
@@ -8,7 +8,7 @@ struct MaxActivityApp: App {
             model.inject(MenuBarView())
         } label: {
             Image(nsImage: MenuBarIcon.image)
-                .accessibilityLabel("MaxActivity")
+                .accessibilityLabel("Maxwell")
         }
         .menuBarExtraStyle(.window)
     }

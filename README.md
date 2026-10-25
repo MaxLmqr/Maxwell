@@ -1,6 +1,8 @@
-# MaxActivity
+# Maxwell
 
-App de barre de menus macOS qui fait deux choses :
+L'assistant personnel de Max sur son Mac, façon Jarvis. Son nom vient d'un vrai nom de majordome, avec un clin d'œil au « démon de Maxwell », qui trie sans relâche.
+
+C'est une app de barre de menus qui fait deux choses :
 
 - **Suivi d'activité** : le temps passé dans chaque application, rangé par catégorie, avec un récap jour / semaine / mois.
 - **Étagère** : on secoue la souris en faisant glisser des fichiers, une petite fenêtre flottante les garde le temps d'aller les déposer ailleurs, façon Dropover.
@@ -22,7 +24,7 @@ Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [G
 - Chaque app a une **catégorie**. Les nouvelles apps sont classées par le modèle d'Apple Intelligence, sur le Mac (macOS 26 ou plus). Sans Apple Intelligence, elles restent « À classer ».
 - Clic droit sur une app pour changer sa catégorie ; la fenêtre **Catégories** gère la liste. La catégorie Système est masquée par défaut, et son temps n'est pas compté.
 - Une notification résume la semaine le lundi à 9 h, et le mois le 1er à 9 h.
-- Données en local, dans `~/Library/Application Support/MaxActivity/activity.sqlite`. Rien ne quitte le Mac.
+- Données en local, dans `~/Library/Application Support/Maxwell/activity.sqlite`. Rien ne quitte le Mac.
 
 ## Code
 
@@ -55,7 +57,7 @@ Le vert de l'app marque ce qui compte : l'app en cours et les quatre catégories
 Pour redessiner chaque écran en PNG, en clair et en sombre, avec des données de démo et sans toucher aux tiennes :
 
 ```bash
-./build.sh && build/MaxActivity.app/Contents/MacOS/MaxActivity --snapshot captures
+./build.sh && build/Maxwell.app/Contents/MacOS/Maxwell --snapshot captures
 ```
 
 Les effets Liquid Glass (segment sélectionné, sélection de la barre latérale, fond des boutons de la barre d'outils) sont dessinés par macOS à l'écran et n'apparaissent pas sur ces captures.
@@ -70,12 +72,12 @@ Une [Étagère](GLOSSARY.md) façon Dropover, en références seulement : les fi
 - **Aperçus** : la pile et la liste montrent les fichiers comme le Finder (première page d'un PDF, image réduite), grâce à Quick Look.
 - **Actions** : le bouton « … » et le clic droit proposent Afficher dans le Finder, Copier (⌘V dans le Finder en colle une copie), Partager (AirDrop, Mail, Messages…) et Vider l'Étagère.
 - **Fermer** : le × vide l'Étagère.
-- **Réglages** (roue dentée du menu) : « Ouvrir l'Étagère » sans secouer, et « Secouer pour ouvrir l'Étagère » pour activer ou couper la Secousse. Coupée, MaxActivity n'écoute plus du tout la souris.
+- **Réglages** (roue dentée du menu) : « Ouvrir l'Étagère » sans secouer, et « Secouer pour ouvrir l'Étagère » pour activer ou couper la Secousse. Coupée, Maxwell n'écoute plus du tout la souris.
 
 Une Secousse, c'est trois changements de sens francs (plus de 120°) de 30 pt minimum en moins de 0,75 s, dans n'importe quelle direction (réglable dans `ShakeDetector.swift`). Chaque glisser de fichiers laisse une trace dans le journal :
 
 ```bash
-/usr/bin/log show --last 10m --predicate 'subsystem == "com.max.MaxActivity"'
+/usr/bin/log show --last 10m --predicate 'subsystem == "com.max.Maxwell"'
 ```
 
 ## Tests

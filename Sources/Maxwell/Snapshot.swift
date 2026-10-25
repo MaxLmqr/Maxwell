@@ -9,7 +9,7 @@ enum Snapshot {
         NSApplication.shared.setActivationPolicy(.accessory)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
-        let dbURL = FileManager.default.temporaryDirectory.appendingPathComponent("maxactivity-demo.sqlite")
+        let dbURL = FileManager.default.temporaryDirectory.appendingPathComponent("maxwell-demo.sqlite")
         for suffix in ["", "-wal", "-shm"] {
             try? FileManager.default.removeItem(at: URL(fileURLWithPath: dbURL.path + suffix))
         }

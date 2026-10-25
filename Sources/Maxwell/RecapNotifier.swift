@@ -38,7 +38,7 @@ final class RecapNotifier: NSObject, ObservableObject, UNUserNotificationCenterD
 
     private func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, error in
-            if let error { NSLog("MaxActivity notification authorization error: \(error)") }
+            if let error { NSLog("Maxwell notification authorization error: \(error)") }
         }
     }
 
@@ -75,7 +75,7 @@ final class RecapNotifier: NSObject, ObservableObject, UNUserNotificationCenterD
 
         let request = UNNotificationRequest(identifier: "recap-\(period.rawValue)", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
-            if let error { NSLog("MaxActivity notification error: \(error)") }
+            if let error { NSLog("Maxwell notification error: \(error)") }
         }
     }
 

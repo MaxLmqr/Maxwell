@@ -1,4 +1,4 @@
-// Dessine l'icône MaxActivity (monogramme M en barres) et produit Resources/AppIcon.icns.
+// Dessine l'icône Maxwell (monogramme M en barres) et produit Resources/AppIcon.icns.
 // Usage : swift Scripts/make-icon.swift
 import AppKit
 

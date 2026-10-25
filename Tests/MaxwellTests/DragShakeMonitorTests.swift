@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-@testable import MaxActivity
+@testable import Maxwell
 
 /// Souris et presse-papiers de glisser-déposer simulés.
 private final class FakePointer: PointerState {
