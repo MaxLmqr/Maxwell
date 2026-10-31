@@ -12,7 +12,7 @@ Maxwell se partage par les [releases GitHub](https://github.com/MaxLmqr/Maxwell/
    ./release.sh 0.3.0 "Ce qui change dans cette version"
    ```
 
-   Les notes s'affichent dans la fenêtre de mise à jour chez les amis, et sur la page de la release.
+   Les notes s'affichent dans la fenêtre de mise à jour chez les amis, et sur la page de la release. L'appcast ne contient que la dernière version : un ami qui n'a pas installé la précédente ne verra que ces notes. Elles doivent donc aussi reprendre ce qui compte dans les versions qu'il a pu manquer, surtout ce qui lui demandera quelque chose, comme l'accès à Chrome.
 
 4. Vérifier que l'appcast annonce la bonne version :
 
@@ -57,7 +57,7 @@ Le script fait tout le reste :
 - **`SUFeedURL`** et **`SUPublicEDKey`** dans `Info.plist` : les apps installées ne trouveraient plus les mises à jour ou les refuseraient.
 - **Le certificat de signature** : avec un autre, macOS redemanderait aux amis l'accès à Chrome. Sparkle accepterait quand même la mise à jour, tant que la clé EdDSA ne change pas en même temps.
 
-## Pour les amis
+## Installation
 
 Première installation :
 
