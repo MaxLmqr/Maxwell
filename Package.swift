@@ -14,8 +14,10 @@ let package = Package(
             path: "Sources/Maxwell",
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
-                // Sparkle.framework est copié dans Maxwell.app/Contents/Frameworks par build.sh.
-                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
+                // Sparkle.framework est copié dans Maxwell.app/Contents/Frameworks par build.sh ;
+                // hors de l'app (captures, tests), il est à côté de l'exécutable compilé.
+                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
+                              "-Xlinker", "-rpath", "-Xlinker", "@executable_path"]),
             ]
         ),
         .testTarget(
