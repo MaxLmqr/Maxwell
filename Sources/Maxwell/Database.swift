@@ -3,16 +3,26 @@ import SQLite3
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-/// Identifiant de catégorie. 0 désigne les apps « À classer ».
+/// Identifiant de catégorie. 0 désigne les apps et les sites « À classer ».
 typealias CategoryID = Int64
 let uncategorizedID: CategoryID = 0
 
+/// Ce qui porte une Catégorie : une App, ou un Site visité dans Chrome.
+enum Subject: Hashable {
+    case app(String)
+    case site(String)
+}
+
+/// Temps passé dans une App, ou sur un Site, pendant une période.
 struct AppUsage: Identifiable {
+    /// L'App ; pour un Site, le navigateur où il a été visité.
     let bundleID: String
+    let site: String?
     let name: String
     let categoryID: CategoryID
     let duration: TimeInterval
-    var id: String { bundleID }
+    var subject: Subject { site.map(Subject.site) ?? .app(bundleID) }
+    var id: Subject { subject }
 }
 
 struct Category: Identifiable, Hashable {
@@ -35,22 +45,25 @@ struct Category: Identifiable, Hashable {
     ]
 }
 
-/// Une app déjà vue, avec sa catégorie actuelle.
+/// Une app ou un site déjà vu, avec sa catégorie actuelle.
 struct KnownApp: Identifiable {
+    /// L'App ; pour un Site, le navigateur où il a été visité.
     let bundleID: String
+    let site: String?
     let name: String
     let categoryID: CategoryID
     /// true si Max a choisi la catégorie lui-même ; le classement automatique n'y touche plus.
     let manual: Bool
     let totalDuration: TimeInterval
-    var id: String { bundleID }
+    var subject: Subject { site.map(Subject.site) ?? .app(bundleID) }
+    var id: Subject { subject }
 }
 
 enum DatabaseError: Error {
     case sqlite(String)
 }
 
-/// Stockage local : les sessions d'activité, les catégories et la catégorie de chaque app.
+/// Stockage local : les sessions d'activité, les catégories et la catégorie de chaque app et de chaque site.
 final class Database {
     private var db: OpaquePointer?
 
@@ -97,6 +110,7 @@ final class Database {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 bundle_id TEXT NOT NULL,
                 app_name TEXT NOT NULL,
+                site TEXT,
                 started_at REAL NOT NULL,
                 ended_at REAL NOT NULL
             );
@@ -116,20 +130,37 @@ final class Database {
                 category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
                 manual INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS site_categories (
+                site TEXT PRIMARY KEY,
+                category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+                manual INTEGER NOT NULL DEFAULT 0
+            );
             """)
         seedCategoriesIfNeeded()
         addSymbols()
+        addSites()
+    }
+
+    private func columns(of table: String) -> Set<String> {
+        var columns: Set<String> = []
+        run("PRAGMA table_info(\(table))", []) { columns.insert(String(cString: sqlite3_column_text($0, 1))) }
+        return columns
     }
 
     /// Ajoute le pictogramme des catégories aux bases créées avant qu'il existe.
     private func addSymbols() {
-        var columns: Set<String> = []
-        run("PRAGMA table_info(categories)", []) { columns.insert(String(cString: sqlite3_column_text($0, 1))) }
-        if !columns.contains("symbol") {
+        if !columns(of: "categories").contains("symbol") {
             run("ALTER TABLE categories ADD COLUMN symbol TEXT", [])
         }
         for (name, symbol) in Self.defaultSymbols {
             run("UPDATE categories SET symbol = ? WHERE name = ? AND symbol IS NULL", [symbol, name])
+        }
+    }
+
+    /// Ajoute le Site des sessions aux bases créées avant qu'il existe.
+    private func addSites() {
+        if !columns(of: "sessions").contains("site") {
+            run("ALTER TABLE sessions ADD COLUMN site TEXT", [])
         }
     }
 
@@ -146,9 +177,9 @@ final class Database {
     // MARK: - Sessions
 
     @discardableResult
-    func insertSession(bundleID: String, appName: String, start: Date, end: Date) -> Int64 {
-        run("INSERT INTO sessions (bundle_id, app_name, started_at, ended_at) VALUES (?, ?, ?, ?)",
-            [bundleID, appName, start.timeIntervalSince1970, end.timeIntervalSince1970])
+    func insertSession(bundleID: String, appName: String, site: String? = nil, start: Date, end: Date) -> Int64 {
+        run("INSERT INTO sessions (bundle_id, app_name, site, started_at, ended_at) VALUES (?, ?, ?, ?, ?)",
+            [bundleID, appName, site as Any, start.timeIntervalSince1970, end.timeIntervalSince1970])
         return sqlite3_last_insert_rowid(db)
     }
 
@@ -156,13 +187,25 @@ final class Database {
         run("UPDATE sessions SET ended_at = ? WHERE id = ?", [end.timeIntervalSince1970, sessionID])
     }
 
+    func updateSite(sessionID: Int64, site: String?) {
+        run("UPDATE sessions SET site = ? WHERE id = ?", [site as Any, sessionID])
+    }
+
     // MARK: - Agrégats (hors catégories masquées)
+
+    /// La catégorie d'une session est celle de son Site s'il y en a un, sinon celle de son App.
+    private static let sessionCategory = """
+        LEFT JOIN app_categories ac ON s.site IS NULL AND ac.bundle_id = s.bundle_id
+        LEFT JOIN site_categories sc ON sc.site = s.site
+        """
+    /// Une ligne par Site, et une par App pour le temps passé hors des sites.
+    private static let bySubject = "GROUP BY s.site, CASE WHEN s.site IS NULL THEN s.bundle_id END"
 
     /// Sessions de l'intervalle, tronquées aux bornes, sans les catégories masquées.
     private static let visibleSessions = """
         FROM sessions s
-        LEFT JOIN app_categories ac ON ac.bundle_id = s.bundle_id
-        LEFT JOIN categories c ON c.id = ac.category_id
+        \(sessionCategory)
+        LEFT JOIN categories c ON c.id = COALESCE(sc.category_id, ac.category_id)
         WHERE s.ended_at > ?1 AND s.started_at < ?2 AND COALESCE(c.hidden, 0) = 0
         """
     private static let clippedDuration = "SUM(MIN(s.ended_at, ?2) - MAX(s.started_at, ?1))"
@@ -170,17 +213,19 @@ final class Database {
     func usageByApp(in interval: DateInterval) -> [AppUsage] {
         var result: [AppUsage] = []
         run("""
-            SELECT s.bundle_id, MAX(s.app_name), COALESCE(c.id, 0), \(Self.clippedDuration) AS secs
+            SELECT MAX(s.bundle_id), s.site, COALESCE(s.site, MAX(s.app_name)), COALESCE(c.id, 0),
+                   \(Self.clippedDuration) AS secs
             \(Self.visibleSessions)
-            GROUP BY s.bundle_id
+            \(Self.bySubject)
             ORDER BY secs DESC
             """, bounds(interval)
         ) { stmt in
             result.append(AppUsage(
                 bundleID: String(cString: sqlite3_column_text(stmt, 0)),
-                name: String(cString: sqlite3_column_text(stmt, 1)),
-                categoryID: sqlite3_column_int64(stmt, 2),
-                duration: sqlite3_column_double(stmt, 3)))
+                site: Self.optionalText(stmt, 1),
+                name: String(cString: sqlite3_column_text(stmt, 2)),
+                categoryID: sqlite3_column_int64(stmt, 3),
+                duration: sqlite3_column_double(stmt, 4)))
         }
         return result.filter { $0.duration >= 1 }
     }
@@ -242,7 +287,7 @@ final class Database {
         run("UPDATE OR IGNORE categories SET name = ? WHERE id = ?", [name, id])
     }
 
-    /// Les apps de la catégorie supprimée redeviennent « À classer ».
+    /// Les apps et les sites de la catégorie supprimée redeviennent « À classer ».
     func deleteCategory(_ id: CategoryID) {
         run("DELETE FROM categories WHERE id = ? AND is_system = 0", [id])
     }
@@ -251,54 +296,71 @@ final class Database {
         run("UPDATE categories SET hidden = ? WHERE id = ?", [Int64(hidden ? 1 : 0), id])
     }
 
-    // MARK: - Catégorie des apps
+    // MARK: - Catégorie des apps et des sites
 
     func knownApps() -> [KnownApp] {
         var result: [KnownApp] = []
         run("""
-            SELECT s.bundle_id, MAX(s.app_name), COALESCE(ac.category_id, 0), COALESCE(ac.manual, 0),
+            SELECT MAX(s.bundle_id), s.site, COALESCE(s.site, MAX(s.app_name)),
+                   COALESCE(sc.category_id, ac.category_id, 0), COALESCE(sc.manual, ac.manual, 0),
                    SUM(s.ended_at - s.started_at) AS secs
             FROM sessions s
-            LEFT JOIN app_categories ac ON ac.bundle_id = s.bundle_id
-            GROUP BY s.bundle_id
+            \(Self.sessionCategory)
+            \(Self.bySubject)
             ORDER BY secs DESC
             """, []
         ) { stmt in
             result.append(KnownApp(
                 bundleID: String(cString: sqlite3_column_text(stmt, 0)),
-                name: String(cString: sqlite3_column_text(stmt, 1)),
-                categoryID: sqlite3_column_int64(stmt, 2),
-                manual: sqlite3_column_int64(stmt, 3) != 0,
-                totalDuration: sqlite3_column_double(stmt, 4)))
+                site: Self.optionalText(stmt, 1),
+                name: String(cString: sqlite3_column_text(stmt, 2)),
+                categoryID: sqlite3_column_int64(stmt, 3),
+                manual: sqlite3_column_int64(stmt, 4) != 0,
+                totalDuration: sqlite3_column_double(stmt, 5)))
         }
         return result
     }
 
-    func categoryID(for bundleID: String) -> CategoryID {
+    /// La table où est rangée la catégorie d'une App ou d'un Site, et sa clé.
+    private func categoryTable(_ subject: Subject) -> (table: String, column: String, key: String) {
+        switch subject {
+        case .app(let bundleID): ("app_categories", "bundle_id", bundleID)
+        case .site(let site): ("site_categories", "site", site)
+        }
+    }
+
+    func categoryID(for subject: Subject) -> CategoryID {
+        let (table, column, key) = categoryTable(subject)
         var id = uncategorizedID
-        run("SELECT category_id FROM app_categories WHERE bundle_id = ?", [bundleID]) {
+        run("SELECT category_id FROM \(table) WHERE \(column) = ?", [key]) {
             id = sqlite3_column_int64($0, 0)
         }
         return id
     }
 
-    func setCategory(_ categoryID: CategoryID, for bundleID: String, manual: Bool) {
+    func setCategory(_ categoryID: CategoryID, for subject: Subject, manual: Bool) {
+        let (table, column, key) = categoryTable(subject)
         if categoryID == uncategorizedID {
-            run("DELETE FROM app_categories WHERE bundle_id = ?", [bundleID])
+            run("DELETE FROM \(table) WHERE \(column) = ?", [key])
         } else {
-            run("INSERT OR REPLACE INTO app_categories (bundle_id, category_id, manual) VALUES (?, ?, ?)",
-                [bundleID, categoryID, Int64(manual ? 1 : 0)])
+            run("INSERT OR REPLACE INTO \(table) (\(column), category_id, manual) VALUES (?, ?, ?)",
+                [key, categoryID, Int64(manual ? 1 : 0)])
         }
     }
 
     /// Oublie les catégories choisies automatiquement, pour les faire recalculer.
     func clearAutomaticCategories() {
         run("DELETE FROM app_categories WHERE manual = 0", [])
+        run("DELETE FROM site_categories WHERE manual = 0", [])
     }
 
     // MARK: - SQLite
 
     private var errorMessage: String { String(cString: sqlite3_errmsg(db)) }
+
+    private static func optionalText(_ stmt: OpaquePointer, _ index: Int32) -> String? {
+        sqlite3_column_type(stmt, index) == SQLITE_NULL ? nil : String(cString: sqlite3_column_text(stmt, index))
+    }
 
     private func exec(_ sql: String) throws {
         guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else { throw DatabaseError.sqlite(errorMessage) }

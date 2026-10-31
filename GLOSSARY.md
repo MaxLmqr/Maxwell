@@ -1,15 +1,19 @@
 # Maxwell
 
-L'assistant personnel de Max sur son Mac. Il mesure le temps que Max passe dans chaque application et en fait des récaps par jour, semaine et mois ; il garde aussi des fichiers à portée de main, le temps de les déposer ailleurs.
+L'assistant personnel de Max sur son Mac. Il mesure le temps que Max passe dans chaque application et sur chaque site, et en fait des récaps par jour, semaine et mois ; il garde aussi des fichiers à portée de main, le temps de les déposer ailleurs.
 
 ## Mesure
 
 **App**:
-Une application macOS, identifiée par son identifiant de bundle. C'est la seule unité suivie : pas de fenêtres, d'onglets ni de sites.
+Une application macOS, identifiée par son identifiant de bundle. Avec le Site, c'est la seule unité suivie : pas de fenêtres ni de documents.
 _Avoid_: Programme, logiciel
 
+**Site**:
+Un site web ouvert dans l'onglet actif de Chrome, identifié par son nom d'hôte sans « www. » : mail.google.com et docs.google.com sont deux Sites. Le temps passé sur un Site lui revient, pas à Chrome. Seul ce nom est enregistré, jamais l'adresse complète ni le titre de la page, et la navigation privée n'a pas de Site.
+_Avoid_: Domaine, URL, onglet
+
 **Session**:
-Un intervalle continu pendant lequel une même App est au premier plan et Max est actif.
+Un intervalle continu pendant lequel une même App, et dans Chrome un même Site, est au premier plan et Max est actif.
 _Avoid_: Activité, événement, entrée
 
 **Temps actif**:
@@ -27,14 +31,14 @@ _Avoid_: Suspension
 ## Catégorisation
 
 **Catégorie**:
-Le type d'usage d'une App (Développement, Communication, Design…), choisi dans une liste fixe que Max peut modifier. Chaque App a exactement une Catégorie, qui vaut pour tout son historique. Elle ne porte aucun jugement de productivité.
+Le type d'usage d'une App ou d'un Site (Développement, Communication, Design…), choisi dans une liste fixe que Max peut modifier. Chaque App et chaque Site a exactement une Catégorie, qui vaut pour tout son historique. Elle ne porte aucun jugement de productivité.
 _Avoid_: Tag, label, projet
 
 **Navigation**:
-La Catégorie des navigateurs web. Le site visité n'étant pas suivi, on ne peut pas descendre plus finement.
+La Catégorie des navigateurs web et des moteurs de recherche. Pour Chrome, il n'y reste que le temps sans Site : nouvel onglet, pages de Chrome, navigation privée.
 
 **Système**:
-La Catégorie des dialogues et utilitaires de macOS (notifications, autorisations). Elle est masquable dans les récaps.
+La Catégorie des dialogues et utilitaires de macOS (notifications, autorisations). Elle ne s'applique jamais à un Site, et elle est masquable dans les récaps.
 
 ## Restitution
 

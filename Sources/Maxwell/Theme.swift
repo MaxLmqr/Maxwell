@@ -124,18 +124,40 @@ struct CategoryBadge: View {
     }
 }
 
-/// Icônes des principales apps d'une catégorie, légèrement superposées.
+/// Icônes des principales apps et des principaux sites d'une catégorie.
 struct AppIconStack: View {
-    let bundleIDs: [String]
+    let subjects: [Subject]
     var size: CGFloat = 16
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(bundleIDs.prefix(3), id: \.self) { id in
-                Image(nsImage: AppIcon.image(for: id))
-                    .resizable()
-                    .frame(width: size, height: size)
+            ForEach(subjects.prefix(3), id: \.self) { subject in
+                SubjectIcon(subject: subject, size: size)
             }
+        }
+    }
+}
+
+/// L'icône d'une App, ou l'initiale d'un Site sur un carré gris.
+struct SubjectIcon: View {
+    let subject: Subject
+    var size: CGFloat = 16
+
+    var body: some View {
+        switch subject {
+        case .app(let bundleID):
+            Image(nsImage: AppIcon.image(for: bundleID))
+                .resizable()
+                .frame(width: size, height: size)
+        case .site(let site):
+            // Le dessin d'une icône d'app occupe environ 80 % de son cadre : le carré du site aussi.
+            let side = size * 0.8
+            Text(site.prefix(1).uppercased())
+                .font(.system(size: side * 0.6, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .frame(width: side, height: side)
+                .background(RoundedRectangle(cornerRadius: side * 0.24, style: .continuous).fill(Theme.othersFill))
+                .frame(width: size, height: size)
         }
     }
 }
@@ -166,9 +188,7 @@ struct AppRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(nsImage: AppIcon.image(for: app.bundleID))
-                .resizable()
-                .frame(width: iconSize, height: iconSize)
+            SubjectIcon(subject: app.subject, size: iconSize)
             Text(app.name).lineLimit(1)
             Spacer(minLength: 8)
             Text(formatDuration(app.duration))

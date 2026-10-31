@@ -54,7 +54,7 @@ struct MenuBarView: View {
                 VStack(spacing: 4) {
                     ForEach(ranking.colored) { entry in
                         CategoryLine(entry: entry,
-                                     bundleIDs: usage.filter { $0.categoryID == entry.id }.map(\.bundleID))
+                                     subjects: usage.filter { $0.categoryID == entry.id }.map(\.subject))
                     }
                 }
                 .padding(.top, 12)
@@ -198,13 +198,13 @@ private struct ShareBar: View {
 
 private struct CategoryLine: View {
     let entry: CategoryRanking.Entry
-    let bundleIDs: [String]
+    let subjects: [Subject]
 
     var body: some View {
         HStack(spacing: 10) {
             CategoryBadge(symbol: entry.symbol, fill: entry.fill, glyph: entry.glyph, size: 22)
             Text(entry.name).lineLimit(1)
-            AppIconStack(bundleIDs: bundleIDs, size: 15)
+            AppIconStack(subjects: subjects, size: 15)
             Spacer(minLength: 8)
             Text(formatDuration(entry.duration))
                 .foregroundStyle(.secondary)

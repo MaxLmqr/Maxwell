@@ -4,7 +4,7 @@ L'assistant personnel de Max sur son Mac, façon Jarvis. Son nom vient d'un vrai
 
 C'est une app de barre de menus qui fait deux choses :
 
-- **Suivi d'activité** : le temps passé dans chaque application, rangé par catégorie, avec un récap jour / semaine / mois.
+- **Suivi d'activité** : le temps passé dans chaque application, et sur chaque site dans Chrome, rangé par catégorie, avec un récap jour / semaine / mois.
 - **Étagère** : on secoue la souris en faisant glisser des fichiers, une petite fenêtre flottante les garde le temps d'aller les déposer ailleurs, façon Dropover.
 
 ## Lancer
@@ -13,7 +13,7 @@ C'est une app de barre de menus qui fait deux choses :
 ./build.sh --install
 ```
 
-Compile, installe dans `/Applications` et lance l'app (monogramme M dans la barre de menus).
+Compile, installe dans `/Applications` et lance l'app (monogramme M dans la barre de menus). L'app est signée avec le certificat auto-signé « Maxwell Self-Signed » du Trousseau, pour que macOS garde ses autorisations d'une compilation à l'autre. Sans lui, elle est signée ad hoc et macOS redemande l'accès à Chrome à chaque fois.
 
 ## Partager avec des amis
 
@@ -30,9 +30,10 @@ L'app n'est pas signée par un compte Apple Developer. Au premier lancement, mac
 Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [GLOSSARY.md](GLOSSARY.md).
 
 - Une **session** = une app au premier plan entre deux instants. Elle est sauvegardée toutes les 5 s.
+- Dans **Chrome**, Maxwell lit l'onglet actif toutes les 2 s : changer de site démarre une nouvelle session, et le temps passé sur `github.com` ou `mail.google.com` va dans la catégorie du site. Seul le nom du site est gardé, et la navigation privée n'est pas suivie. La première fois, macOS demande l'autorisation de « contrôler Google Chrome » ; sans elle, Chrome compte comme une seule app.
 - Le suivi s'arrête après **3 min sans clavier ni souris**, ou quand le Mac dort ou que l'écran est verrouillé.
-- Chaque app a une **catégorie**. Les nouvelles apps sont classées par le modèle d'Apple Intelligence, sur le Mac (macOS 26 ou plus). Sans Apple Intelligence, elles restent « À classer ».
-- Clic droit sur une app pour changer sa catégorie ; la fenêtre **Catégories** gère la liste. La catégorie Système est masquée par défaut, et son temps n'est pas compté.
+- Chaque app et chaque site a une **catégorie**. Les nouveaux sont classés par le modèle d'Apple Intelligence, sur le Mac (macOS 26 ou plus). Sans Apple Intelligence, ils restent « À classer ».
+- Clic droit sur une app ou un site pour changer sa catégorie ; la fenêtre **Catégories** gère la liste. La catégorie Système est masquée par défaut, et son temps n'est pas compté.
 - Une notification résume la semaine le lundi à 9 h, et le mois le 1er à 9 h.
 - Données en local, dans `~/Library/Application Support/Maxwell/activity.sqlite`. Rien ne quitte le Mac : la seule connexion est la recherche de mises à jour sur GitHub, qui n'envoie aucune donnée.
 
@@ -42,8 +43,9 @@ Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [G
 |---|---|
 | `AppModel.swift` | Objets de l'app et fenêtres (récap, catégories) |
 | `Tracker.swift` | Détection de l'app active, de l'inactivité et de la veille |
-| `Database.swift` | Stockage SQLite : sessions, catégories, agrégats |
-| `Categorizer.swift` | Classement automatique des apps par Apple Intelligence |
+| `ChromeTab.swift` | Site de l'onglet actif de Chrome, lu par Apple Events |
+| `Database.swift` | Stockage SQLite : sessions, catégories des apps et des sites, agrégats |
+| `Categorizer.swift` | Classement automatique des apps et des sites par Apple Intelligence |
 | `RecapNotifier.swift` | Notifications de récap hebdo et mensuel |
 | `Updater.swift` | Mises à jour par Sparkle |
 | `MenuBarView.swift` | Résumé du jour dans la barre de menus |
@@ -99,7 +101,7 @@ swift test
 
 ## Pistes
 
-- Suivre les sites visités dans les navigateurs (permission Automatisation), pour découper « Navigation ».
+- Suivre les sites dans les autres navigateurs (Safari, Arc…), comme dans Chrome.
 - Export CSV.
 
 ## Icône

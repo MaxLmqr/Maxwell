@@ -4,6 +4,8 @@ import AppKit
 enum DemoData {
     private struct DemoApp {
         let bundleID: String
+        /// Un Site visité dans Chrome ; nil pour le temps passé dans l'App elle-même.
+        var site: String? = nil
         let name: String
         let category: String
         let weight: Double
@@ -16,7 +18,11 @@ enum DemoData {
         DemoApp(bundleID: "com.microsoft.VSCode", name: "Visual Studio Code", category: "Développement", weight: 7, minutes: 5...25),
         DemoApp(bundleID: "com.mitchellh.ghostty", name: "Ghostty", category: "Développement", weight: 10, minutes: 2...12),
         DemoApp(bundleID: "com.anthropic.claudefordesktop", name: "Claude", category: "IA", weight: 14, minutes: 3...20),
-        DemoApp(bundleID: "com.google.Chrome", name: "Google Chrome", category: "Navigation", weight: 12, minutes: 2...15),
+        DemoApp(bundleID: "com.google.Chrome", site: "github.com", name: "github.com", category: "Développement", weight: 5, minutes: 2...12),
+        DemoApp(bundleID: "com.google.Chrome", site: "docs.google.com", name: "docs.google.com", category: "Écriture et documents", weight: 3, minutes: 3...15),
+        DemoApp(bundleID: "com.google.Chrome", site: "mail.google.com", name: "mail.google.com", category: "Communication", weight: 2, minutes: 1...6),
+        DemoApp(bundleID: "com.google.Chrome", site: "google.com", name: "google.com", category: "Navigation", weight: 1, minutes: 0.5...3),
+        DemoApp(bundleID: "com.google.Chrome", name: "Google Chrome", category: "Navigation", weight: 1, minutes: 0.3...2),
         DemoApp(bundleID: "com.tinyspeck.slackmacgap", name: "Slack", category: "Communication", weight: 10, minutes: 1...8),
         DemoApp(bundleID: "com.apple.mail", name: "Mail", category: "Communication", weight: 4, minutes: 2...10),
         DemoApp(bundleID: "com.figma.Desktop", name: "Figma", category: "Design", weight: 6, minutes: 5...30),
@@ -33,7 +39,10 @@ enum DemoData {
         DemoApp(bundleID: "com.spotify.client", name: "Spotify", category: "Divertissement", weight: 6, minutes: 3...20),
         DemoApp(bundleID: "com.apple.TV", name: "TV", category: "Divertissement", weight: 3, minutes: 10...40),
         DemoApp(bundleID: "com.apple.Photos", name: "Photos", category: "Divertissement", weight: 2, minutes: 3...15),
-        DemoApp(bundleID: "com.google.Chrome", name: "Google Chrome", category: "Navigation", weight: 10, minutes: 3...25),
+        DemoApp(bundleID: "com.google.Chrome", site: "youtube.com", name: "youtube.com", category: "Divertissement", weight: 5, minutes: 5...25),
+        DemoApp(bundleID: "com.google.Chrome", site: "netflix.com", name: "netflix.com", category: "Divertissement", weight: 2, minutes: 20...45),
+        DemoApp(bundleID: "com.google.Chrome", site: "google.com", name: "google.com", category: "Navigation", weight: 2, minutes: 0.5...3),
+        DemoApp(bundleID: "com.google.Chrome", name: "Google Chrome", category: "Navigation", weight: 1, minutes: 0.3...2),
         DemoApp(bundleID: "net.whatsapp.WhatsApp", name: "WhatsApp", category: "Communication", weight: 6, minutes: 1...8),
         DemoApp(bundleID: "com.apple.MobileSMS", name: "Messages", category: "Communication", weight: 4, minutes: 1...6),
         DemoApp(bundleID: "com.apple.journal", name: "Journal", category: "Écriture et documents", weight: 2, minutes: 5...15),
@@ -44,7 +53,9 @@ enum DemoData {
     static func fill(_ db: Database, now: Date) {
         let categories = Dictionary(uniqueKeysWithValues: db.categories().map { ($0.name, $0.id) })
         for app in work + leisure {
-            if let id = categories[app.category] { db.setCategory(id, for: app.bundleID, manual: false) }
+            if let id = categories[app.category] {
+                db.setCategory(id, for: app.site.map(Subject.site) ?? .app(app.bundleID), manual: false)
+            }
         }
 
         var random = SplitMix64(seed: 42)
@@ -72,7 +83,8 @@ enum DemoData {
                 while time < end {
                     let app = pick(block.pool, &random)
                     let sessionEnd = min(time.addingTimeInterval(random.range(app.minutes.lowerBound, app.minutes.upperBound) * 60), end)
-                    db.insertSession(bundleID: app.bundleID, appName: app.name, start: time, end: sessionEnd)
+                    db.insertSession(bundleID: app.bundleID, appName: app.site == nil ? app.name : "Google Chrome",
+                                     site: app.site, start: time, end: sessionEnd)
                     time = sessionEnd.addingTimeInterval(random.range(5, 90))
                 }
             }

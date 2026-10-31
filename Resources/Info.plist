@@ -25,6 +25,9 @@
     <!-- Pas d'icône dans le Dock : l'app vit dans la barre de menus. -->
     <key>LSUIElement</key>
     <true/>
+    <!-- Affiché par macOS quand Maxwell demande, une seule fois, à lire l'onglet actif de Chrome. -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Maxwell lit l'adresse de l'onglet actif de Chrome pour compter le temps passé sur chaque site. Seul le nom du site est enregistré, sur ce Mac.</string>
     <!-- Mises à jour Sparkle : l'appcast est joint à la dernière release GitHub, publiée par release.sh. -->
     <key>SUFeedURL</key>
     <string>https://github.com/MaxLmqr/Maxwell/releases/latest/download/appcast.xml</string>

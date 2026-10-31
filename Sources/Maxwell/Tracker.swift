@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 
 /// Suit l'app au premier plan et enregistre une session à chaque changement.
+/// Dans Chrome, une session démarre aussi quand le site de l'onglet actif change.
 /// Le suivi s'interrompt en cas d'inactivité, de veille ou d'écran verrouillé.
 @MainActor
 final class Tracker: ObservableObject {
@@ -12,20 +13,34 @@ final class Tracker: ObservableObject {
     @Published private(set) var lastUpdate = Date()
 
     let db: Database
-    /// Appelé à chaque nouvelle session, avec l'identifiant de l'app.
-    var onAppSeen: ((String) -> Void)?
+    /// Appelé à chaque nouvelle session avec son App, puis avec son Site quand Chrome l'a donné.
+    var onSeen: ((Subject) -> Void)?
 
     /// Au-delà de ce délai sans clavier/souris, on considère que tu n'es plus là.
     private let idleThreshold: TimeInterval = 180
     private let tickInterval: TimeInterval = 5
+    /// Rythme de lecture de l'onglet actif, pendant que Chrome est devant.
+    private let siteInterval: TimeInterval = 2
     private let ignoredBundleIDs: Set<String> = [
         "com.apple.loginwindow",
         "com.apple.ScreenSaver.Engine",
         Bundle.main.bundleIdentifier ?? "",
     ]
 
-    private var current: (id: Int64, start: Date)?
-    private var timer: Timer?
+    /// La session en cours. `siteRead` passe à true quand Chrome a donné l'onglet actif.
+    private struct Current {
+        let id: Int64
+        let start: Date
+        let bundleID: String
+        let appName: String
+        var site: String?
+        var siteRead: Bool
+    }
+
+    private var current: Current?
+    private let chromeTab = ChromeTab()
+    private var readingSite = false
+    private var timers: [Timer] = []
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
 
     init(db: Database) {
@@ -57,9 +72,14 @@ final class Tracker: ObservableObject {
             self?.closeCurrent(at: Date())
         }
 
-        timer = Timer.scheduledTimer(withTimeInterval: tickInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tick() }
-        }
+        timers = [
+            Timer.scheduledTimer(withTimeInterval: tickInterval, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.tick() }
+            },
+            Timer.scheduledTimer(withTimeInterval: siteInterval, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.readSite() }
+            },
+        ]
         begin(NSWorkspace.shared.frontmostApplication, at: Date())
     }
 
@@ -124,10 +144,48 @@ final class Tracker: ObservableObject {
             currentAppName = nil
             return
         }
-        let name = app.localizedName ?? bundleID
-        current = (db.insertSession(bundleID: bundleID, appName: name, start: date, end: date), date)
-        currentAppName = name
-        onAppSeen?(bundleID)
+        start(bundleID: bundleID, appName: app.localizedName ?? bundleID, site: nil, siteRead: false, at: date)
+        onSeen?(.app(bundleID))
+        readSite()
+    }
+
+    private func start(bundleID: String, appName: String, site: String?, siteRead: Bool, at date: Date) {
+        let id = db.insertSession(bundleID: bundleID, appName: appName, site: site, start: date, end: date)
+        current = Current(id: id, start: date, bundleID: bundleID, appName: appName, site: site, siteRead: siteRead)
+        currentAppName = site ?? appName
+    }
+
+    // MARK: - Site de l'onglet actif
+
+    /// Demande à Chrome son onglet actif, s'il est devant. La réponse arrive un peu plus tard :
+    /// elle est ignorée si la session a changé entre-temps.
+    private func readSite() {
+        guard let current, current.bundleID == ChromeTab.bundleID, !readingSite else { return }
+        readingSite = true
+        Task {
+            let reading = await chromeTab.activeSite()
+            readingSite = false
+            if case .site(let site) = reading { siteRead(site, sessionID: current.id) }
+        }
+    }
+
+    private func siteRead(_ site: String?, sessionID: Int64) {
+        guard var current, current.id == sessionID else { return }
+        if !current.siteRead {
+            // Première réponse depuis l'arrivée dans Chrome : la session en cours prend ce site.
+            db.updateSite(sessionID: current.id, site: site)
+            current.site = site
+            current.siteRead = true
+            self.current = current
+            currentAppName = site ?? current.appName
+        } else if site != current.site {
+            let now = Date()
+            closeCurrent(at: now)
+            start(bundleID: current.bundleID, appName: current.appName, site: site, siteRead: true, at: now)
+        } else {
+            return
+        }
+        if let site { onSeen?(.site(site)) }
     }
 
     private func closeCurrent(at date: Date) {

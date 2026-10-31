@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Gestion des catégories : la liste à gauche, les apps de la catégorie choisie à droite.
+/// Gestion des catégories : la liste à gauche, les apps et les sites de la catégorie choisie à droite.
 struct CategoriesView: View {
     @EnvironmentObject private var categorizer: Categorizer
     @State private var selection: CategoryID?
@@ -39,7 +39,7 @@ struct CategoriesView: View {
                 Button { categorizer.reclassifyAutomatic() } label: {
                     Label("Reclasser", systemImage: "sparkles")
                 }
-                .help("Recalcule la catégorie des apps que tu n'as pas classées toi-même")
+                .help("Recalcule la catégorie des apps et des sites que tu n'as pas classés toi-même")
                 .disabled(categorizer.isRunning)
             }
         }
@@ -75,7 +75,7 @@ struct CategoriesView: View {
                 Button { delete(selected, categories: categories) } label: {
                     Image(systemName: "minus").frame(width: 24, height: 22)
                 }
-                .help("Supprimer la catégorie : ses apps seront reclassées")
+                .help("Supprimer la catégorie : ses apps et ses sites seront reclassés")
                 .disabled(selected == nil || selected?.isSystem == true)
                 Spacer()
             }
@@ -137,7 +137,7 @@ private struct SidebarRow: View {
 
 private struct CategoryDetail: View {
     @EnvironmentObject private var categorizer: Categorizer
-    /// nil pour les apps « À classer ».
+    /// nil pour les apps et les sites « À classer ».
     let category: Category?
     let apps: [KnownApp]
     let categories: [Category]
@@ -240,7 +240,11 @@ private struct CategoryDetail: View {
     }
 
     private var subtitle: String {
-        let count = "\(apps.count) app\(apps.count > 1 ? "s" : "")"
+        let sites = apps.filter { $0.site != nil }.count
+        let count = [(apps.count - sites, "app"), (sites, "site")]
+            .filter { $0.0 > 0 }
+            .map { "\($0.0) \($0.1)\($0.0 > 1 ? "s" : "")" }
+            .joined(separator: " et ")
         if category == nil { return "\(count) en attente de catégorie" }
         if category?.hidden == true { return "\(count) · masquée : son temps n'est pas compté" }
         let time = apps.reduce(0) { $0 + $1.totalDuration }
@@ -253,10 +257,10 @@ private struct CategoryDetail: View {
                 .font(.system(size: 26))
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 4)
-            Text("Aucune app dans cette catégorie")
+            Text("Aucune app ni aucun site dans cette catégorie")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
-            Text("Fais un clic droit sur une app dans le récap pour l'y ranger.")
+            Text("Fais un clic droit sur une app ou un site dans le récap pour l'y ranger.")
                 .font(.system(size: 12))
                 .foregroundStyle(.tertiary)
         }
@@ -283,9 +287,7 @@ private struct AppAssignmentRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(nsImage: AppIcon.image(for: app.bundleID))
-                .resizable()
-                .frame(width: 22, height: 22)
+            SubjectIcon(subject: app.subject, size: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(app.name)
                     .font(.system(size: 13))
@@ -311,12 +313,14 @@ private struct AppAssignmentRow: View {
     }
 
     @ViewBuilder private var origin: some View {
+        // « une app classée », « un site classé ».
+        let classified = app.site == nil ? "classée" : "classé"
         if current == nil {
-            Text("Pas encore classée")
+            Text("Pas encore \(classified)")
         } else if app.manual {
-            Text("Classée par toi")
+            Text("\(classified.capitalized) par toi")
         } else {
-            Label("Classée par Apple Intelligence", systemImage: "sparkles")
+            Label("\(classified.capitalized) par Apple Intelligence", systemImage: "sparkles")
                 .labelStyle(.titleAndIcon)
         }
     }
@@ -324,7 +328,7 @@ private struct AppAssignmentRow: View {
     @ViewBuilder private var moveMenu: some View {
         ForEach(categories.filter { $0.id != current?.id }) { category in
             Button {
-                categorizer.db.setCategory(category.id, for: app.bundleID, manual: true)
+                categorizer.db.setCategory(category.id, for: app.subject, manual: true)
                 categorizer.changed()
             } label: {
                 Label(category.name, systemImage: category.symbol)
@@ -333,7 +337,7 @@ private struct AppAssignmentRow: View {
         if app.manual {
             Divider()
             Button("Laisser l'IA choisir") {
-                categorizer.db.setCategory(uncategorizedID, for: app.bundleID, manual: false)
+                categorizer.db.setCategory(uncategorizedID, for: app.subject, manual: false)
                 categorizer.changed()
             }
         }

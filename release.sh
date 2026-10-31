@@ -17,6 +17,11 @@ if [[ -n "$(git status --porcelain)" ]]; then
   echo "❌ Des modifications ne sont pas commitées." >&2
   exit 1
 fi
+# Toutes les versions doivent être signées avec le même certificat (voir build.sh).
+if ! security find-certificate -c "Maxwell Self-Signed" >/dev/null 2>&1; then
+  echo "❌ Le certificat « Maxwell Self-Signed » n'est pas dans le Trousseau (voir RELEASING.md)." >&2
+  exit 1
+fi
 if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
   echo "❌ La version $VERSION existe déjà." >&2
   exit 1

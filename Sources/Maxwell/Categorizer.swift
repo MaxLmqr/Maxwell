@@ -1,8 +1,8 @@
 import AppKit
 import FoundationModels
 
-/// Donne une catégorie à chaque app qui n'en a pas encore.
-/// Les dialogues d'Apple vont dans Système ; les autres apps sont classées par le modèle
+/// Donne une catégorie à chaque app et à chaque site qui n'en a pas encore.
+/// Les dialogues d'Apple vont dans Système ; les autres apps et les sites sont classés par le modèle
 /// d'Apple Intelligence, sur le Mac, qui choisit obligatoirement dans la liste des catégories.
 @MainActor
 final class Categorizer: ObservableObject {
@@ -22,22 +22,22 @@ final class Categorizer: ObservableObject {
         case .available:
             return nil
         case .unavailable(.appleIntelligenceNotEnabled):
-            return "Active Apple Intelligence dans les Réglages Système pour classer les nouvelles apps automatiquement."
+            return "Active Apple Intelligence dans les Réglages Système pour classer les nouvelles apps et les nouveaux sites automatiquement."
         case .unavailable(.modelNotReady):
-            return "Le modèle d'Apple Intelligence est en cours de téléchargement. Les nouvelles apps seront classées ensuite."
+            return "Le modèle d'Apple Intelligence est en cours de téléchargement. Les nouvelles apps et les nouveaux sites seront classés ensuite."
         case .unavailable(.deviceNotEligible):
-            return "Ce Mac ne prend pas en charge Apple Intelligence : classe les nouvelles apps à la main."
+            return "Ce Mac ne prend pas en charge Apple Intelligence : classe les nouvelles apps et les nouveaux sites à la main."
         case .unavailable:
-            return "Apple Intelligence est indisponible : classe les nouvelles apps à la main."
+            return "Apple Intelligence est indisponible : classe les nouvelles apps et les nouveaux sites à la main."
         }
     }
 
-    /// À appeler quand une app passe au premier plan.
-    func appSeen(_ bundleID: String) {
-        if db.categoryID(for: bundleID) == uncategorizedID { classifyPending() }
+    /// À appeler quand une app passe au premier plan, ou qu'un site s'ouvre dans Chrome.
+    func seen(_ subject: Subject) {
+        if db.categoryID(for: subject) == uncategorizedID { classifyPending() }
     }
 
-    /// À appeler après toute modification faite par Max (catégorie d'une app, liste des catégories).
+    /// À appeler après toute modification faite par Max (catégorie d'une app ou d'un site, liste des catégories).
     func changed() {
         revision += 1
         classifyPending()
@@ -70,10 +70,10 @@ final class Categorizer: ObservableObject {
         let modelAvailable = SystemLanguageModel.default.availability == .available
 
         for app in pending {
-            if isAppleBackgroundApp(app.bundleID), let system = categories.first(where: \.isSystem) {
-                db.setCategory(system.id, for: app.bundleID, manual: false)
+            if app.site == nil, isAppleBackgroundApp(app.bundleID), let system = categories.first(where: \.isSystem) {
+                db.setCategory(system.id, for: app.subject, manual: false)
             } else if modelAvailable, let category = await askModel(app: app, categories: categories) {
-                db.setCategory(category.id, for: app.bundleID, manual: false)
+                db.setCategory(category.id, for: app.subject, manual: false)
             } else {
                 continue
             }
@@ -92,39 +92,47 @@ final class Categorizer: ObservableObject {
 
     /// Précisions pour les catégories par défaut ; une catégorie ajoutée par Max n'a que son nom.
     private static let hints: [String: String] = [
-        "Développement": "éditeurs de code, IDE, terminaux, outils de développeur",
+        "Développement": "éditeurs de code, IDE, terminaux, outils de développeur, sites comme GitHub ou Stack Overflow",
         "IA": "assistants d'intelligence artificielle comme Claude ou ChatGPT",
-        "Communication": "messagerie et e-mail : Slack, Mail, Messages, WhatsApp",
+        "Communication": "messagerie et e-mail : Slack, Mail, Gmail, Messages, WhatsApp",
         "Réunions": "visioconférence : Zoom, Google Meet, Teams, FaceTime",
         "Design": "création graphique : Figma, Sketch, retouche photo, icônes",
-        "Écriture et documents": "traitement de texte, notes, lecteurs de PDF comme Aperçu, tableurs, présentations",
-        "Navigation": "navigateurs web uniquement : Safari, Chrome, Arc, Firefox",
-        "Divertissement": "musique, vidéo, jeux, App Store",
+        "Écriture et documents": "traitement de texte, notes, lecteurs de PDF comme Aperçu, tableurs, présentations, Google Docs, Notion",
+        "Navigation": "uniquement les navigateurs web (Safari, Chrome, Arc, Firefox) et les moteurs de recherche (Google, Bing, DuckDuckGo)",
+        "Divertissement": "musique, vidéo, jeux, App Store, YouTube, Netflix",
         "Outils": "utilitaires : Finder, lanceurs comme Raycast ou Alfred, captures d'écran comme Shottr, nettoyage, gestion de fichiers",
         "Système": "composants de macOS : dialogues, agents, notifications, Réglages Système",
     ]
 
     private func askModel(app: KnownApp, categories: [Category]) async -> Category? {
-        let names = categories.map(\.name)
-        let list = categories
+        // Système ne concerne que les composants de macOS, jamais un site.
+        let choices = app.site == nil ? categories : categories.filter { !$0.isSystem }
+        let names = choices.map(\.name)
+        let list = choices
             .map { category in Self.hints[category.name].map { "- \(category.name) : \($0)" } ?? "- \(category.name)" }
             .joined(separator: "\n")
+        let (task, prompt) = if let site = app.site {
+            ("Tu ranges des sites web par type d'usage. "
+                + "Choisis la catégorie qui décrit le mieux ce qu'on fait principalement sur le site.",
+             "Site web : \(site)")
+        } else {
+            ("Tu ranges des applications macOS par type d'usage. "
+                + "Choisis la catégorie qui décrit le mieux l'usage principal de l'application.",
+             "Application : \(app.name) (identifiant : \(app.bundleID))")
+        }
         do {
             let schema = try GenerationSchema(
                 root: DynamicGenerationSchema(name: "Categorie", anyOf: names), dependencies: [])
             let session = LanguageModelSession(instructions: """
-                Tu ranges des applications macOS par type d'usage. \
-                Choisis la catégorie qui décrit le mieux l'usage principal de l'application.
+                \(task)
                 Catégories :
                 \(list)
                 """)
-            let response = try await session.respond(
-                to: "Application : \(app.name) (identifiant : \(app.bundleID))",
-                schema: schema)
+            let response = try await session.respond(to: prompt, schema: schema)
             let name = try response.content.value(String.self)
-            return categories.first { $0.name == name }
+            return choices.first { $0.name == name }
         } catch {
-            NSLog("Maxwell classification error for \(app.bundleID): \(error)")
+            NSLog("Maxwell classification error for \(app.site ?? app.bundleID): \(error)")
             return nil
         }
     }

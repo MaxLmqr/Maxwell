@@ -53,7 +53,7 @@ struct RecapView: View {
                 HStack(alignment: .top, spacing: 44) {
                     metric("Temps actif") { BigNumber(formatDuration(ranking.total), size: 36) }
                     if period == .day {
-                        metric("Apps utilisées") { Text("\(usage.count)") }
+                        metric("Apps utilisées") { Text("\(Set(usage.map(\.bundleID)).count)") }
                     } else {
                         metric("Par jour actif") { Text(formatDuration(average)) }
                     }
@@ -145,7 +145,7 @@ struct RecapView: View {
                     ForEach(ranking.entries) { entry in
                         let apps = usage.filter { $0.categoryID == entry.id }
                         let isOpen = expanded.contains(entry.id)
-                        CategoryRow(entry: entry, bundleIDs: apps.map(\.bundleID), longest: longest,
+                        CategoryRow(entry: entry, subjects: apps.map(\.subject), longest: longest,
                                     total: ranking.total, isHovered: hovered == entry.id, isExpanded: isOpen)
                             .onHover { inside in
                                 if inside { hovered = entry.id } else if hovered == entry.id { hovered = nil }
@@ -159,7 +159,7 @@ struct RecapView: View {
                             VStack(spacing: 0) {
                                 ForEach(apps) { app in
                                     AppRow(app: app, share: app.duration / entry.duration, iconSize: 16)
-                                        .appCategoryMenu(bundleID: app.bundleID, current: app.categoryID)
+                                        .categoryMenu(for: app.subject, current: app.categoryID)
                                 }
                             }
                             .padding(.leading, 50)
@@ -175,7 +175,7 @@ struct RecapView: View {
 
 private struct CategoryRow: View {
     let entry: CategoryRanking.Entry
-    let bundleIDs: [String]
+    let subjects: [Subject]
     let longest: TimeInterval
     let total: TimeInterval
     let isHovered: Bool
@@ -189,7 +189,7 @@ private struct CategoryRow: View {
                     Text(entry.name)
                         .font(.system(size: 13, weight: .medium))
                         .lineLimit(1)
-                    AppIconStack(bundleIDs: bundleIDs, size: 15)
+                    AppIconStack(subjects: subjects, size: 15)
                     Spacer(minLength: 8)
                     Text(formatDuration(entry.duration))
                         .font(.system(size: 13))
@@ -414,15 +414,15 @@ private struct RecapChart: View {
 }
 
 extension View {
-    /// Clic droit sur une app : changer sa catégorie.
-    func appCategoryMenu(bundleID: String, current: CategoryID) -> some View {
-        modifier(AppCategoryMenu(bundleID: bundleID, current: current))
+    /// Clic droit sur une app ou un site : changer sa catégorie.
+    func categoryMenu(for subject: Subject, current: CategoryID) -> some View {
+        modifier(CategoryMenu(subject: subject, current: current))
     }
 }
 
-private struct AppCategoryMenu: ViewModifier {
+private struct CategoryMenu: ViewModifier {
     @EnvironmentObject private var categorizer: Categorizer
-    let bundleID: String
+    let subject: Subject
     let current: CategoryID
 
     func body(content: Content) -> some View {
@@ -430,7 +430,7 @@ private struct AppCategoryMenu: ViewModifier {
             Text("Catégorie")
             ForEach(categorizer.db.categories()) { category in
                 Button {
-                    categorizer.db.setCategory(category.id, for: bundleID, manual: true)
+                    categorizer.db.setCategory(category.id, for: subject, manual: true)
                     categorizer.changed()
                 } label: {
                     if category.id == current {
