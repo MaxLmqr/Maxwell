@@ -62,10 +62,11 @@ enum Windows {
     static let recapSize = NSSize(width: 680, height: 820)
     static let categoriesSize = NSSize(width: 700, height: 520)
 
+    /// Sans date, le récap s'ouvre sur aujourd'hui, même s'il montrait une autre période avant d'être fermé.
     static func showRecap(period: Period? = nil, date: Date? = nil) {
         let model = AppModel.shared
         if let period { model.navigation.period = period }
-        if let date { model.navigation.referenceDate = date }
+        model.navigation.referenceDate = date ?? Date()
         if recap == nil {
             recap = makeWindow(name: "Récap", size: recapSize, content: model.inject(RecapView()), showsTitle: false)
         }
