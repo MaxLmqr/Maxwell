@@ -1,17 +1,25 @@
 import Charts
 import SwiftUI
 
+/// En dessous de ce temps sur la période, un Site n'apparaît dans le détail de sa catégorie
+/// qu'avec « Tout afficher ».
+private let smallSiteDuration: TimeInterval = 10 * 60
+
 struct RecapView: View {
     @EnvironmentObject private var tracker: Tracker
     @EnvironmentObject private var categorizer: Categorizer
     @EnvironmentObject private var navigation: RecapNavigation
     @State private var hovered: CategoryID?
     @State private var expanded: Set<CategoryID> = []
+    /// Catégories dont le détail montre aussi les petits sites.
+    @State private var showingAll: Set<CategoryID> = []
     @State private var selectedBucket: Date?
 
-    /// `previewHovered` sert aux captures : il simule le survol d'une catégorie.
-    init(previewHovered: CategoryID? = nil) {
+    /// `previewHovered` et `previewExpanded` servent aux captures :
+    /// ils simulent le survol d'une catégorie et le détail ouvert d'une autre.
+    init(previewHovered: CategoryID? = nil, previewExpanded: CategoryID? = nil) {
         _hovered = State(initialValue: previewHovered)
+        _expanded = State(initialValue: Set([previewExpanded].compactMap { $0 }))
     }
 
     struct Bucket: Identifiable {
@@ -156,10 +164,21 @@ struct RecapView: View {
                                 }
                             }
                         if isOpen {
+                            let small = apps.filter(\.isSmallSite)
+                            // Une catégorie qui n'a que de petits sites les montre tous.
+                            let foldsSmallSites = !small.isEmpty && small.count < apps.count
+                            let showsAll = showingAll.contains(entry.id) || !foldsSmallSites
                             VStack(spacing: 0) {
-                                ForEach(apps) { app in
+                                ForEach(showsAll ? apps : apps.filter { !$0.isSmallSite }) { app in
                                     AppRow(app: app, share: app.duration / entry.duration, iconSize: 16)
                                         .categoryMenu(for: app.subject, current: app.categoryID)
+                                }
+                                if foldsSmallSites {
+                                    SmallSitesToggle(count: small.count, showsAll: showsAll) {
+                                        withAnimation(.easeOut(duration: 0.15)) {
+                                            if showsAll { showingAll.remove(entry.id) } else { showingAll.insert(entry.id) }
+                                        }
+                                    }
                                 }
                             }
                             .padding(.leading, 50)
@@ -217,6 +236,38 @@ private struct CategoryRow: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.primary.opacity(isHovered ? 0.05 : 0)))
         .contentShape(Rectangle())
+    }
+}
+
+private extension AppUsage {
+    var isSmallSite: Bool { site != nil && duration < smallSiteDuration }
+}
+
+/// Bas du détail d'une catégorie : montre ou cache ses petits sites.
+private struct SmallSitesToggle: View {
+    let count: Int
+    let showsAll: Bool
+    let action: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    Text(showsAll ? "Afficher moins" : "Tout afficher")
+                        .foregroundStyle(Theme.accent)
+                    if !showsAll {
+                        Text("\(count) site\(count > 1 ? "s" : "") de moins de \(formatDuration(smallSiteDuration))")
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .font(.system(size: 12))
+        // Aligné sur les noms, après l'icône de 16 pt.
+        .padding(.leading, 26)
+        .padding(.vertical, 4)
     }
 }
 

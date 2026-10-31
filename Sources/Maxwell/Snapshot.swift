@@ -52,6 +52,10 @@ enum Snapshot {
                              to: folder.appendingPathComponent("recap-\(period.fileName)-\(suffix).png"))
             }
             model.navigation.period = .week
+            // Plus haute que la fenêtre réelle, pour voir le détail de Navigation en entier.
+            renderWindow(name: "Récap", size: NSSize(width: Windows.recapSize.width, height: 1100),
+                         content: model.inject(RecapView(previewExpanded: categoryID("Navigation"))),
+                         showsTitle: false, appearance: appearance, to: folder.appendingPathComponent("recap-detail-\(suffix).png"))
             renderWindow(name: "Récap", size: Windows.recapSize,
                          content: model.inject(RecapView(previewHovered: categoryID("IA"))),
                          showsTitle: false, appearance: appearance, to: folder.appendingPathComponent("recap-survol-\(suffix).png"))
