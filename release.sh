@@ -22,11 +22,16 @@ if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
   exit 1
 fi
 
+# Lit la valeur qui suit une clé d'Info.plist.
+plist_value() { /usr/libexec/PlistBuddy -c "Print :$1" $PLIST; }
+# Remplace la valeur qui suit une clé. sed plutôt que PlistBuddy, qui réécrirait le fichier sans ses commentaires.
+set_plist_value() { sed -i '' "/<key>$1<\/key>/{n;s|<string>.*</string>|<string>$2</string>|;}" $PLIST; }
+
 # CFBundleVersion est le numéro que Sparkle compare : il augmente de 1 à chaque release.
-BUILD=$(( $(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" $PLIST) + 1 ))
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" $PLIST
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" $PLIST
-MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" $PLIST)
+BUILD=$(( $(plist_value CFBundleVersion) + 1 ))
+set_plist_value CFBundleShortVersionString "$VERSION"
+set_plist_value CFBundleVersion "$BUILD"
+MIN_OS=$(plist_value LSMinimumSystemVersion)
 
 ./build.sh
 

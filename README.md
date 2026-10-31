@@ -21,7 +21,7 @@ Compile, installe dans `/Applications` et lance l'app (monogramme M dans la barr
 ./release.sh 0.2.0 "Ce qui change dans cette version"
 ```
 
-Publie une release GitHub avec l'app zippée et l'`appcast.xml`. Les apps déjà installées la proposent d'elles-mêmes grâce à [Sparkle](https://sparkle-project.org), ou via ⚙︎ → « Rechercher les mises à jour… ». Les mises à jour sont signées avec une clé EdDSA rangée dans le Trousseau (compte « Maxwell ») : sans elle, plus de mise à jour possible pour les copies installées.
+Publie une release GitHub avec l'app zippée et l'`appcast.xml`. La procédure complète est dans [RELEASING.md](RELEASING.md). Les apps déjà installées la proposent d'elles-mêmes grâce à [Sparkle](https://sparkle-project.org), ou via ⚙︎ → « Rechercher les mises à jour… ». Les mises à jour sont signées avec une clé EdDSA rangée dans le Trousseau (compte « Maxwell ») : sans elle, plus de mise à jour possible pour les copies installées.
 
 L'app n'est pas signée par un compte Apple Developer. Au premier lancement, macOS la bloque : il faut aller dans Réglages système → Confidentialité et sécurité → « Ouvrir quand même ». Il faut aussi macOS 26.
 
