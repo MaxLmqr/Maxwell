@@ -25,5 +25,13 @@
     <!-- Pas d'icône dans le Dock : l'app vit dans la barre de menus. -->
     <key>LSUIElement</key>
     <true/>
+    <!-- Mises à jour Sparkle : l'appcast est joint à la dernière release GitHub, publiée par release.sh. -->
+    <key>SUFeedURL</key>
+    <string>https://github.com/MaxLmqr/Maxwell/releases/latest/download/appcast.xml</string>
+    <!-- Clé publique ; la clé privée est dans le Trousseau de Max (compte « Maxwell »). -->
+    <key>SUPublicEDKey</key>
+    <string>QSknClSx1qsq3pYkc2Y5sLU9BeFIPoirylmaN3hFdCE=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
 </dict>
 </plist>

@@ -15,6 +15,16 @@ C'est une app de barre de menus qui fait deux choses :
 
 Compile, installe dans `/Applications` et lance l'app (monogramme M dans la barre de menus).
 
+## Partager avec des amis
+
+```bash
+./release.sh 0.2.0 "Ce qui change dans cette version"
+```
+
+Publie une release GitHub avec l'app zippée et l'`appcast.xml`. Les apps déjà installées la proposent d'elles-mêmes grâce à [Sparkle](https://sparkle-project.org), ou via ⚙︎ → « Rechercher les mises à jour… ». Les mises à jour sont signées avec une clé EdDSA rangée dans le Trousseau (compte « Maxwell ») : sans elle, plus de mise à jour possible pour les copies installées.
+
+L'app n'est pas signée par un compte Apple Developer. Au premier lancement, macOS la bloque : il faut aller dans Réglages système → Confidentialité et sécurité → « Ouvrir quand même ». Il faut aussi macOS 26.
+
 ## Fonctionnement
 
 Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [GLOSSARY.md](GLOSSARY.md).
@@ -24,7 +34,7 @@ Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [G
 - Chaque app a une **catégorie**. Les nouvelles apps sont classées par le modèle d'Apple Intelligence, sur le Mac (macOS 26 ou plus). Sans Apple Intelligence, elles restent « À classer ».
 - Clic droit sur une app pour changer sa catégorie ; la fenêtre **Catégories** gère la liste. La catégorie Système est masquée par défaut, et son temps n'est pas compté.
 - Une notification résume la semaine le lundi à 9 h, et le mois le 1er à 9 h.
-- Données en local, dans `~/Library/Application Support/Maxwell/activity.sqlite`. Rien ne quitte le Mac.
+- Données en local, dans `~/Library/Application Support/Maxwell/activity.sqlite`. Rien ne quitte le Mac : la seule connexion est la recherche de mises à jour sur GitHub, qui n'envoie aucune donnée.
 
 ## Code
 
@@ -35,6 +45,7 @@ Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [G
 | `Database.swift` | Stockage SQLite : sessions, catégories, agrégats |
 | `Categorizer.swift` | Classement automatique des apps par Apple Intelligence |
 | `RecapNotifier.swift` | Notifications de récap hebdo et mensuel |
+| `Updater.swift` | Mises à jour par Sparkle |
 | `MenuBarView.swift` | Résumé du jour dans la barre de menus |
 | `RecapView.swift` | Fenêtre de récap par catégorie, avec graphique |
 | `CategoriesView.swift` | Gestion des catégories et de la catégorie de chaque app |

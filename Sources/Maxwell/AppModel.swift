@@ -20,7 +20,7 @@ final class AppModel {
     let navigation = RecapNavigation()
     let shelf = ShelfController()
 
-    /// `live: false` sert aux captures de l'interface : rien n'est suivi, classé ni notifié.
+    /// `live: false` sert aux captures de l'interface : rien n'est suivi, classé, notifié ni mis à jour.
     init(db: Database, live: Bool) {
         self.db = db
         categorizer = Categorizer(db: db)
@@ -32,6 +32,7 @@ final class AppModel {
         categorizer.classifyPending()
         notifier.start()
         shelf.start()
+        Updater.start()
     }
 
     func inject<V: View>(_ view: V) -> some View {

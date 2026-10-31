@@ -122,6 +122,9 @@ struct MenuBarView: View {
                 Toggle("Notifications de récap", isOn: $notifier.enabled)
                 Toggle("Lancer au démarrage", isOn: $launchAtLogin)
                 Divider()
+                if let updater = Updater.shared {
+                    Button("Rechercher les mises à jour…") { updater.checkForUpdates() }
+                }
                 Button("Quitter Maxwell") { NSApp.terminate(nil) }
             } label: {
                 Image(systemName: "gearshape")
