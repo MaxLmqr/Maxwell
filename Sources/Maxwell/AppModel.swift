@@ -27,7 +27,7 @@ final class AppModel {
         tracker = Tracker(db: db)
         notifier = RecapNotifier(db: db)
         guard live else { return }
-        tracker.onSeen = { [categorizer] in categorizer.seen($0) }
+        tracker.onAppSeen = { [categorizer] in categorizer.appSeen($0) }
         tracker.start()
         categorizer.classifyPending()
         notifier.start()

@@ -32,9 +32,9 @@ final class SiteDatabaseTests {
                          end: Date(timeIntervalSince1970: (at + minutes) * 60))
     }
 
-    @Test func timeOnASiteCountsInTheSiteCategoryNotTheBrowserOne() {
+    @Test func aSiteMaxClassifiedCountsInItsOwnCategoryNotTheBrowserOne() {
         db.setCategory(category("Navigation"), for: .app(chrome), manual: false)
-        db.setCategory(category("Développement"), for: .site("github.com"), manual: false)
+        db.setCategory(category("Développement"), for: .site("github.com"), manual: true)
         session(chrome, site: "github.com", at: 0, minutes: 10)
         session(chrome, at: 10, minutes: 2)
 
@@ -56,22 +56,31 @@ final class SiteDatabaseTests {
         #expect(usage[0].duration == 1_200)
     }
 
-    @Test func aSiteWithoutCategoryIsToBeClassifiedEvenIfTheBrowserHasOne() {
-        db.setCategory(category("Navigation"), for: .app(chrome), manual: false)
+    @Test func aSiteWithoutItsOwnCategoryFollowsTheBrowser() {
+        // Même quand Max a choisi la catégorie de Chrome, celle du site n'est pas « classée par toi ».
+        db.setCategory(category("Navigation"), for: .app(chrome), manual: true)
         session(chrome, site: "github.com", at: 0, minutes: 10)
 
-        #expect(db.durationByCategory(in: day)[uncategorizedID] == 600)
-        #expect(db.knownApps().first { $0.site == "github.com" }?.categoryID == uncategorizedID)
+        #expect(db.durationByCategory(in: day)[category("Navigation")] == 600)
+        let site = db.knownApps().first { $0.site == "github.com" }
+        #expect(site?.categoryID == category("Navigation"))
+        #expect(site?.manual == false)
     }
 
-    @Test func reclassifyingForgetsAutomaticSiteCategoriesButKeepsManualOnes() {
+    @Test func aSiteFollowsTheBrowserAgainWhenMaxRemovesItsCategory() {
+        db.setCategory(category("Navigation"), for: .app(chrome), manual: false)
         db.setCategory(category("Développement"), for: .site("github.com"), manual: true)
-        db.setCategory(category("Divertissement"), for: .site("youtube.com"), manual: false)
+        session(chrome, site: "github.com", at: 0, minutes: 10)
 
+        db.setCategory(uncategorizedID, for: .site("github.com"), manual: false)
+
+        #expect(db.durationByCategory(in: day)[category("Navigation")] == 600)
+    }
+
+    @Test func reclassifyingKeepsTheCategoriesMaxGaveToSites() {
+        db.setCategory(category("Développement"), for: .site("github.com"), manual: true)
         db.clearAutomaticCategories()
-
         #expect(db.categoryID(for: .site("github.com")) == category("Développement"))
-        #expect(db.categoryID(for: .site("youtube.com")) == uncategorizedID)
     }
 
     @Test func aSiteKeepsItsCategoryApartFromAnAppWithTheSameKey() {

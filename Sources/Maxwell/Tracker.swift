@@ -13,8 +13,8 @@ final class Tracker: ObservableObject {
     @Published private(set) var lastUpdate = Date()
 
     let db: Database
-    /// Appelé à chaque nouvelle session avec son App, puis avec son Site quand Chrome l'a donné.
-    var onSeen: ((Subject) -> Void)?
+    /// Appelé quand une app passe au premier plan, avec son identifiant.
+    var onAppSeen: ((String) -> Void)?
 
     /// Au-delà de ce délai sans clavier/souris, on considère que tu n'es plus là.
     private let idleThreshold: TimeInterval = 180
@@ -145,7 +145,7 @@ final class Tracker: ObservableObject {
             return
         }
         start(bundleID: bundleID, appName: app.localizedName ?? bundleID, site: nil, siteRead: false, at: date)
-        onSeen?(.app(bundleID))
+        onAppSeen?(bundleID)
         readSite()
     }
 
@@ -182,10 +182,7 @@ final class Tracker: ObservableObject {
             let now = Date()
             closeCurrent(at: now)
             start(bundleID: current.bundleID, appName: current.appName, site: site, siteRead: true, at: now)
-        } else {
-            return
         }
-        if let site { onSeen?(.site(site)) }
     }
 
     private func closeCurrent(at date: Date) {

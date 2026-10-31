@@ -9,7 +9,7 @@ Une application macOS, identifiée par son identifiant de bundle. Avec le Site, 
 _Avoid_: Programme, logiciel
 
 **Site**:
-Un site web ouvert dans l'onglet actif de Chrome, identifié par son nom d'hôte sans « www. » : mail.google.com et docs.google.com sont deux Sites. Le temps passé sur un Site lui revient, pas à Chrome. Seul ce nom est enregistré, jamais l'adresse complète ni le titre de la page, et la navigation privée n'a pas de Site.
+Un site web ouvert dans l'onglet actif de Chrome, identifié par son nom d'hôte sans « www. » : mail.google.com et docs.google.com sont deux Sites. Le temps passé sur chaque Site est détaillé, et compte dans la Catégorie de Chrome tant que Max ne lui en choisit pas une autre. Seul ce nom est enregistré, jamais l'adresse complète ni le titre de la page, et la navigation privée n'a pas de Site.
 _Avoid_: Domaine, URL, onglet
 
 **Session**:
@@ -35,10 +35,10 @@ Le type d'usage d'une App ou d'un Site (Développement, Communication, Design…
 _Avoid_: Tag, label, projet
 
 **Navigation**:
-La Catégorie des navigateurs web et des moteurs de recherche. Pour Chrome, il n'y reste que le temps sans Site : nouvel onglet, pages de Chrome, navigation privée.
+La Catégorie des navigateurs web, et donc des Sites, sauf ceux que Max range ailleurs.
 
 **Système**:
-La Catégorie des dialogues et utilitaires de macOS (notifications, autorisations). Elle ne s'applique jamais à un Site, et elle est masquable dans les récaps.
+La Catégorie des dialogues et utilitaires de macOS (notifications, autorisations). Elle est masquable dans les récaps.
 
 ## Restitution
 

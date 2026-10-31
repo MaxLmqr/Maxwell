@@ -56,7 +56,7 @@ enum Snapshot {
                          content: model.inject(RecapView(previewHovered: categoryID("IA"))),
                          showsTitle: false, appearance: appearance, to: folder.appendingPathComponent("recap-survol-\(suffix).png"))
             renderWindow(name: "Catégories", size: Windows.categoriesSize,
-                         content: model.inject(CategoriesView(initialSelection: categoryID("Développement"))),
+                         content: model.inject(CategoriesView(initialSelection: categoryID("Navigation"))),
                          appearance: appearance, to: folder.appendingPathComponent("categories-\(suffix).png"))
         }
         print("✅ Captures dans \(folder.path)")

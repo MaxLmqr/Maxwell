@@ -39,7 +39,7 @@ struct CategoriesView: View {
                 Button { categorizer.reclassifyAutomatic() } label: {
                     Label("Reclasser", systemImage: "sparkles")
                 }
-                .help("Recalcule la catégorie des apps et des sites que tu n'as pas classés toi-même")
+                .help("Recalcule la catégorie des apps que tu n'as pas classées toi-même")
                 .disabled(categorizer.isRunning)
             }
         }
@@ -319,8 +319,10 @@ private struct AppAssignmentRow: View {
             Text("Pas encore \(classified)")
         } else if app.manual {
             Text("\(classified.capitalized) par toi")
+        } else if app.site != nil {
+            Text("Suit la catégorie de Chrome")
         } else {
-            Label("\(classified.capitalized) par Apple Intelligence", systemImage: "sparkles")
+            Label("Classée par Apple Intelligence", systemImage: "sparkles")
                 .labelStyle(.titleAndIcon)
         }
     }
@@ -336,7 +338,7 @@ private struct AppAssignmentRow: View {
         }
         if app.manual {
             Divider()
-            Button("Laisser l'IA choisir") {
+            Button(app.site == nil ? "Laisser l'IA choisir" : "Suivre la catégorie de Chrome") {
                 categorizer.db.setCategory(uncategorizedID, for: app.subject, manual: false)
                 categorizer.changed()
             }

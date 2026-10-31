@@ -53,6 +53,7 @@ struct KnownApp: Identifiable {
     let name: String
     let categoryID: CategoryID
     /// true si Max a choisi la catégorie lui-même ; le classement automatique n'y touche plus.
+    /// Un Site pour lequel Max n'a rien choisi suit la catégorie de son navigateur.
     let manual: Bool
     let totalDuration: TimeInterval
     var subject: Subject { site.map(Subject.site) ?? .app(bundleID) }
@@ -193,9 +194,10 @@ final class Database {
 
     // MARK: - Agrégats (hors catégories masquées)
 
-    /// La catégorie d'une session est celle de son Site s'il y en a un, sinon celle de son App.
+    /// La catégorie d'une session est celle de son Site si Max lui en a choisi une, sinon celle de son App :
+    /// un Site suit son navigateur.
     private static let sessionCategory = """
-        LEFT JOIN app_categories ac ON s.site IS NULL AND ac.bundle_id = s.bundle_id
+        LEFT JOIN app_categories ac ON ac.bundle_id = s.bundle_id
         LEFT JOIN site_categories sc ON sc.site = s.site
         """
     /// Une ligne par Site, et une par App pour le temps passé hors des sites.
@@ -302,7 +304,8 @@ final class Database {
         var result: [KnownApp] = []
         run("""
             SELECT MAX(s.bundle_id), s.site, COALESCE(s.site, MAX(s.app_name)),
-                   COALESCE(sc.category_id, ac.category_id, 0), COALESCE(sc.manual, ac.manual, 0),
+                   COALESCE(sc.category_id, ac.category_id, 0),
+                   CASE WHEN s.site IS NULL THEN COALESCE(ac.manual, 0) ELSE COALESCE(sc.manual, 0) END,
                    SUM(s.ended_at - s.started_at) AS secs
             FROM sessions s
             \(Self.sessionCategory)
@@ -349,9 +352,9 @@ final class Database {
     }
 
     /// Oublie les catégories choisies automatiquement, pour les faire recalculer.
+    /// Les Sites n'en ont pas : seul Max leur en choisit une.
     func clearAutomaticCategories() {
         run("DELETE FROM app_categories WHERE manual = 0", [])
-        run("DELETE FROM site_categories WHERE manual = 0", [])
     }
 
     // MARK: - SQLite
