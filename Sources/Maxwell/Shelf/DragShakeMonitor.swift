@@ -120,8 +120,13 @@ final class DragShakeMonitor {
 
     private func sample(at time: TimeInterval) {
         if drag == .none {
-            guard pointer.dragChangeCount != baseline else { return }
+            let count = pointer.dragChangeCount
+            guard count != baseline else { return }
+            // macOS 27 vide ce presse-papiers à chaque clic : un changement sans aucun type n'est pas encore un glisser,
+            // le vrai arrive au changement suivant.
+            baseline = count
             let types = pointer.dragTypes
+            guard !types.isEmpty else { return }
             let list = types.map(\.rawValue).joined(separator: ", ")
             if types.contains(where: Self.fileTypes.contains) {
                 drag = .files

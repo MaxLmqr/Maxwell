@@ -36,12 +36,15 @@ struct DragShakeMonitorTests {
     }
 
     /// Bouton enfoncé, puis relevés à 60 Hz pendant `duration` secondes en suivant `x`.
+    /// `clearedOnClick` imite macOS 27, qui vide le presse-papiers de glisser à chaque clic,
+    /// quelques relevés avant que le vrai glisser n'y écrive ses types.
     private func press(for duration: Double, startingDrag types: [NSPasteboard.PasteboardType]?,
-                       x: (Double) -> Double) {
+                       clearedOnClick: Bool = false, x: (Double) -> Double) {
         pointer.isLeftButtonDown = true
         monitor.pressBegan()
-        if let types { pointer.beginDrag(types) }
+        if clearedOnClick { pointer.beginDrag([]) } else if let types { pointer.beginDrag(types) }
         for step in 0...Int(duration * 60) {
+            if clearedOnClick, step == 5, let types { pointer.beginDrag(types) }
             let time = 100 + Double(step) / 60
             pointer.mouseLocation.x = x(Double(step) / 60)
             monitor.poll(at: time)
@@ -60,6 +63,18 @@ struct DragShakeMonitorTests {
     @Test func legacyFinderFileTypeCountsAsFiles() {
         press(for: 0.6, startingDrag: [NSPasteboard.PasteboardType("NSFilenamesPboardType")], x: shake)
         #expect(shakes.count == 1)
+    }
+
+    @Test func aPasteboardClearedOnClickDoesNotHideTheFileDrag() {
+        press(for: 0.8, startingDrag: [.fileURL], clearedOnClick: true, x: shake)
+        #expect(shakes.count == 1)
+        #expect(recorded.fileDragsEnded == 1)
+    }
+
+    @Test func aPasteboardClearedOnClickAloneIsNotAFileDrag() {
+        press(for: 0.6, startingDrag: nil, clearedOnClick: true, x: shake)
+        #expect(shakes.isEmpty)
+        #expect(recorded.fileDragsEnded == 0)
     }
 
     @Test func shakingWhileDraggingTextDoesNothing() {
