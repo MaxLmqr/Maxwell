@@ -2,8 +2,7 @@ import Charts
 import SwiftUI
 
 struct RecapView: View {
-    @EnvironmentObject private var tracker: Tracker
-    @EnvironmentObject private var categorizer: Categorizer
+    @EnvironmentObject private var source: RecapSource
     @EnvironmentObject private var navigation: RecapNavigation
     @State private var hovered: CategoryID?
     @State private var expanded: Set<CategoryID> = []
@@ -19,11 +18,8 @@ struct RecapView: View {
     }
 
     var body: some View {
-        // Lire ces valeurs abonne la vue aux ticks du tracker et aux changements de catégories.
-        let now = tracker.lastUpdate
-        let _ = categorizer.revision
         let period = navigation.period
-        let recap = Recap(db: tracker.db, period: period, containing: navigation.referenceDate, now: now)
+        let recap = source.recap(period, containing: navigation.referenceDate)
         let interval = recap.interval
         let isCurrent = interval.contains(Date())
 

@@ -11,7 +11,7 @@ final class Tracker: ObservableObject {
     /// Change à chaque tick : les vues l'observent pour se rafraîchir.
     @Published private(set) var lastUpdate = Date()
 
-    let db: Database
+    private let db: Database
     /// Appelé quand une app passe au premier plan, avec son identifiant.
     var onAppSeen: ((String) -> Void)?
 

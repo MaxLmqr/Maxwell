@@ -3,16 +3,15 @@ import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject private var tracker: Tracker
-    @EnvironmentObject private var categorizer: Categorizer
+    @EnvironmentObject private var source: RecapSource
     @EnvironmentObject private var notifier: RecapNotifier
     @EnvironmentObject private var shelf: ShelfController
     @Environment(\.dismiss) private var dismiss
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
-        let now = tracker.lastUpdate
-        let _ = categorizer.revision
-        let recap = Recap(db: tracker.db, period: .day, containing: now, now: now)
+        let now = source.now
+        let recap = source.recap(.day, containing: now)
 
         VStack(alignment: .leading, spacing: 0) {
             HStack {

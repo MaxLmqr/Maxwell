@@ -17,6 +17,7 @@ final class AppModel {
     let tracker: Tracker
     let categorizer: Categorizer
     let notifier: RecapNotifier
+    let recaps: RecapSource
     let navigation = RecapNavigation()
     let shelf = ShelfController()
 
@@ -26,6 +27,7 @@ final class AppModel {
         categorizer = Categorizer(db: db)
         tracker = Tracker(db: db)
         notifier = RecapNotifier(db: db)
+        recaps = RecapSource(db: db, tracker: tracker, categorizer: categorizer)
         guard live else { return }
         tracker.onAppSeen = { [categorizer] in categorizer.appSeen($0) }
         tracker.start()
@@ -39,6 +41,7 @@ final class AppModel {
         view
             .environmentObject(tracker)
             .environmentObject(categorizer)
+            .environmentObject(recaps)
             .environmentObject(notifier)
             .environmentObject(navigation)
             .environmentObject(shelf)
