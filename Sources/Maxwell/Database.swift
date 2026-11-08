@@ -25,6 +25,22 @@ struct AppUsage: Identifiable {
     var id: Subject { subject }
 }
 
+/// Une Session telle que le Récap la compte : une App, un Site éventuel et sa Catégorie effective.
+struct VisibleSession {
+    let start: Date
+    let end: Date
+    let bundleID: String
+    let appName: String
+    let site: String?
+    let categoryID: CategoryID
+    var subject: Subject { site.map(Subject.site) ?? .app(bundleID) }
+
+    /// Durée de la Session coupée aux bornes de l'intervalle, 0 si elle ne le touche pas.
+    func duration(in interval: DateInterval) -> TimeInterval {
+        max(min(end, interval.end).timeIntervalSince(max(start, interval.start)), 0)
+    }
+}
+
 struct Category: Identifiable, Hashable {
     let id: CategoryID
     var name: String
@@ -200,53 +216,36 @@ final class Database {
         LEFT JOIN app_categories ac ON ac.bundle_id = s.bundle_id
         LEFT JOIN site_categories sc ON sc.site = s.site
         """
+
     /// Une ligne par Site, et une par App pour le temps passé hors des sites.
     private static let bySubject = "GROUP BY s.site, CASE WHEN s.site IS NULL THEN s.bundle_id END"
 
-    /// Sessions de l'intervalle, tronquées aux bornes, sans les catégories masquées.
+    /// Sessions qui touchent l'intervalle, sans les catégories masquées.
     private static let visibleSessions = """
         FROM sessions s
         \(sessionCategory)
         LEFT JOIN categories c ON c.id = COALESCE(sc.category_id, ac.category_id)
         WHERE s.ended_at > ?1 AND s.started_at < ?2 AND COALESCE(c.hidden, 0) = 0
         """
-    private static let clippedDuration = "SUM(MIN(s.ended_at, ?2) - MAX(s.started_at, ?1))"
 
-    func usageByApp(in interval: DateInterval) -> [AppUsage] {
-        var result: [AppUsage] = []
+    /// Les Sessions qui touchent l'intervalle, hors catégories masquées, avec leur Catégorie effective.
+    /// Leurs bornes ne sont pas coupées : `duration(in:)` le fait.
+    func visibleSessions(in interval: DateInterval) -> [VisibleSession] {
+        var result: [VisibleSession] = []
         run("""
-            SELECT MAX(s.bundle_id), s.site, COALESCE(s.site, MAX(s.app_name)), COALESCE(c.id, 0),
-                   \(Self.clippedDuration) AS secs
+            SELECT s.started_at, s.ended_at, s.bundle_id, s.app_name, s.site, COALESCE(c.id, 0)
             \(Self.visibleSessions)
-            \(Self.bySubject)
-            ORDER BY secs DESC
             """, bounds(interval)
         ) { stmt in
-            result.append(AppUsage(
-                bundleID: String(cString: sqlite3_column_text(stmt, 0)),
-                site: Self.optionalText(stmt, 1),
-                name: String(cString: sqlite3_column_text(stmt, 2)),
-                categoryID: sqlite3_column_int64(stmt, 3),
-                duration: sqlite3_column_double(stmt, 4)))
-        }
-        return result.filter { $0.duration >= 1 }
-    }
-
-    func durationByCategory(in interval: DateInterval) -> [CategoryID: TimeInterval] {
-        var result: [CategoryID: TimeInterval] = [:]
-        run("""
-            SELECT COALESCE(c.id, 0), \(Self.clippedDuration)
-            \(Self.visibleSessions)
-            GROUP BY COALESCE(c.id, 0)
-            """, bounds(interval)
-        ) { stmt in
-            result[sqlite3_column_int64(stmt, 0)] = sqlite3_column_double(stmt, 1)
+            result.append(VisibleSession(
+                start: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 0)),
+                end: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1)),
+                bundleID: String(cString: sqlite3_column_text(stmt, 2)),
+                appName: String(cString: sqlite3_column_text(stmt, 3)),
+                site: Self.optionalText(stmt, 4),
+                categoryID: sqlite3_column_int64(stmt, 5)))
         }
         return result
-    }
-
-    func totalDuration(in interval: DateInterval) -> TimeInterval {
-        durationByCategory(in: interval).values.reduce(0, +)
     }
 
     private func bounds(_ interval: DateInterval) -> [Any] {

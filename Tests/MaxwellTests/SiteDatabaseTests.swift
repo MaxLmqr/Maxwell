@@ -21,6 +21,17 @@ final class SiteDatabaseTests {
         }
     }
 
+    /// Le Récap du jour de 1970 qui contient les Sessions des tests, en temps universel.
+    private func recap(_ db: Database? = nil) -> Recap {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return Recap(db: db ?? self.db, period: .day, containing: day.start, now: day.end, calendar: calendar)
+    }
+
+    private func duration(of name: String) -> TimeInterval? {
+        recap().category(category(name))?.duration
+    }
+
     private func category(_ name: String) -> CategoryID {
         db.categories().first { $0.name == name }!.id
     }
@@ -38,9 +49,8 @@ final class SiteDatabaseTests {
         session(chrome, site: "github.com", at: 0, minutes: 10)
         session(chrome, at: 10, minutes: 2)
 
-        let durations = db.durationByCategory(in: day)
-        #expect(durations[category("Développement")] == 600)
-        #expect(durations[category("Navigation")] == 120)
+        #expect(duration(of: "Développement") == 600)
+        #expect(duration(of: "Navigation") == 120)
     }
 
     @Test func eachSiteHasItsOwnLineBesideTheBrowser() {
@@ -49,7 +59,7 @@ final class SiteDatabaseTests {
         session(chrome, site: "github.com", at: 15, minutes: 10)
         session(chrome, at: 25, minutes: 1)
 
-        let usage = db.usageByApp(in: day)
+        let usage = recap().categories.flatMap(\.subjects)
         #expect(usage.map(\.subject) == [.site("github.com"), .site("mail.google.com"), .app(chrome)])
         #expect(usage.map(\.name) == ["github.com", "mail.google.com", "Google Chrome"])
         #expect(usage.map(\.bundleID) == [chrome, chrome, chrome])
@@ -61,7 +71,7 @@ final class SiteDatabaseTests {
         db.setCategory(category("Navigation"), for: .app(chrome), manual: true)
         session(chrome, site: "github.com", at: 0, minutes: 10)
 
-        #expect(db.durationByCategory(in: day)[category("Navigation")] == 600)
+        #expect(duration(of: "Navigation") == 600)
         let site = db.knownApps().first { $0.site == "github.com" }
         #expect(site?.categoryID == category("Navigation"))
         #expect(site?.manual == false)
@@ -74,7 +84,7 @@ final class SiteDatabaseTests {
 
         db.setCategory(uncategorizedID, for: .site("github.com"), manual: false)
 
-        #expect(db.durationByCategory(in: day)[category("Navigation")] == 600)
+        #expect(duration(of: "Navigation") == 600)
     }
 
     @Test func reclassifyingKeepsTheCategoriesMaxGaveToSites() {
@@ -92,7 +102,7 @@ final class SiteDatabaseTests {
         let id = db.insertSession(bundleID: chrome, appName: "Google Chrome",
                                   start: day.start, end: day.start.addingTimeInterval(300))
         db.updateSite(sessionID: id, site: "github.com")
-        #expect(db.usageByApp(in: day).map(\.subject) == [.site("github.com")])
+        #expect(db.visibleSessions(in: day).map(\.subject) == [.site("github.com")])
     }
 
     @Test func aDatabaseFromBeforeSitesGainsTheColumn() throws {
@@ -110,6 +120,6 @@ final class SiteDatabaseTests {
         let migrated = try Database(url: oldURL)
         migrated.insertSession(bundleID: chrome, appName: "Google Chrome", site: "github.com",
                                start: Date(timeIntervalSince1970: 60), end: Date(timeIntervalSince1970: 120))
-        #expect(Set(migrated.usageByApp(in: day).map(\.subject)) == [.app("com.apple.Notes"), .site("github.com")])
+        #expect(Set(migrated.visibleSessions(in: day).map(\.subject)) == [.app("com.apple.Notes"), .site("github.com")])
     }
 }

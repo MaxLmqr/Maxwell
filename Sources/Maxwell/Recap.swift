@@ -87,13 +87,40 @@ struct Recap {
     init(db: Database, period: Period, containing date: Date, now: Date = Date(), calendar: Calendar = .current) {
         self.period = period
         interval = period.interval(containing: date, calendar: calendar)
-        previousTotal = db.totalDuration(in: period.previousInterval(before: interval, now: now, calendar: calendar))
+        let previous = period.previousInterval(before: interval, now: now, calendar: calendar)
+        previousTotal = db.visibleSessions(in: previous).reduce(0) { $0 + $1.duration(in: previous) }
+
+        // Une seule lecture de la base : tout le reste se compte à partir de ces Sessions.
+        let sessions = db.visibleSessions(in: interval)
+        let bucketIntervals = period.buckets(of: interval, calendar: calendar)
+        var byCategory: [CategoryID: TimeInterval] = [:]
+        var bySubject: [Subject: AppUsage] = [:]
+        var byBucket = [[CategoryID: TimeInterval]](repeating: [:], count: bucketIntervals.count)
+        for session in sessions {
+            let duration = session.duration(in: interval)
+            byCategory[session.categoryID, default: 0] += duration
+            let previousUsage = bySubject[session.subject]
+            // Pour un Site visité dans plusieurs navigateurs, on garde le même navigateur que l'ancienne
+            // requête (le plus grand identifiant) et le nom de l'App le plus grand pour une App.
+            bySubject[session.subject] = AppUsage(
+                bundleID: max(previousUsage?.bundleID ?? session.bundleID, session.bundleID),
+                site: session.site,
+                name: session.site ?? max(previousUsage?.name ?? session.appName, session.appName),
+                categoryID: session.categoryID,
+                duration: (previousUsage?.duration ?? 0) + duration)
+            for (index, bucket) in bucketIntervals.enumerated()
+            where bucket.start < session.end && session.start < bucket.end {
+                byBucket[index][session.categoryID, default: 0] += session.duration(in: bucket)
+            }
+        }
+        let usage = bySubject.values
+            .filter { $0.duration >= 1 }
+            .sorted { $0.duration > $1.duration }
 
         let known = db.categories()
         let byID = Dictionary(uniqueKeysWithValues: known.map { ($0.id, $0) })
         let swatches = Theme.swatches(for: known)
-        let usage = db.usageByApp(in: interval)
-        categories = db.durationByCategory(in: interval)
+        categories = byCategory
             .filter { $0.value >= 1 }
             .sorted { $0.value > $1.value }
             .enumerated()
@@ -112,8 +139,7 @@ struct Recap {
         appCount = Set(usage.map(\.bundleID)).count
 
         let principalIDs = Set(categories.prefix(Self.principalCount).map(\.id))
-        buckets = period.buckets(of: interval, calendar: calendar).map { bucket in
-            let byCategory = db.durationByCategory(in: bucket)
+        buckets = zip(bucketIntervals, byBucket).map { bucket, byCategory in
             let others = byCategory.filter { !principalIDs.contains($0.key) }.values.reduce(0, +)
             return Bucket(interval: bucket, byCategory: byCategory, others: others)
         }
