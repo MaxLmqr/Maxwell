@@ -203,21 +203,26 @@ struct SubjectIcon: View {
 
 /// Évolution par rapport à la période précédente : une flèche et un pourcentage, sans jugement de couleur.
 struct DeltaLabel: View {
-    let current: TimeInterval
-    let previous: TimeInterval
+    let change: Recap.Change
 
     var body: some View {
-        if previous >= 60 {
-            let change = Int(((current - previous) / previous * 100).rounded())
+        switch change {
+        case .percent(let change):
             HStack(spacing: 2) {
                 Image(systemName: change > 0 ? "arrow.up.right" : change < 0 ? "arrow.down.right" : "arrow.right")
                     .imageScale(.small)
                 Text("\(abs(change)) %")
             }
-        } else {
+        case .notEnoughData:
             Text("—")
         }
     }
+}
+
+extension Recap.Category {
+    /// Les Catégories principales prennent leur teinte, les autres restent en gris.
+    var fill: Color { isPrincipal ? swatch.fill : Theme.othersFill }
+    var glyph: Color { isPrincipal ? swatch.glyph : .secondary }
 }
 
 struct AppRow: View {

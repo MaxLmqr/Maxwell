@@ -188,9 +188,9 @@ final class RecapTests {
         let navigation = recap.category(category("Navigation"))
         let development = recap.category(category("Développement"))
 
-        #expect(navigation?.subjects.map(\.subject) == [.site("youtube.com"), .app(chrome)])
+        #expect(navigation?.visibleSubjects.map(\.subject) == [.site("youtube.com"), .app(chrome)])
         #expect(navigation?.foldedSites.map(\.subject) == [.site("github.com")])
-        #expect(development?.subjects.map(\.subject) == [.site("stackoverflow.com")])
+        #expect(development?.visibleSubjects.map(\.subject) == [.site("stackoverflow.com")])
         #expect(development?.foldedSites.isEmpty == true)
     }
 

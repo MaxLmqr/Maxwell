@@ -15,11 +15,15 @@ enum Snapshot {
         }
         let db: Database
         do { db = try Database(url: dbURL) } catch { fatalError("Base de démo : \(error)") }
-        let now = Date()
+        // MAXWELL_SNAPSHOT_NOW (secondes depuis 1970) fige l'heure : deux séries de captures
+        // faites à des moments différents montrent alors exactement les mêmes données.
+        let now = ProcessInfo.processInfo.environment["MAXWELL_SNAPSHOT_NOW"]
+            .flatMap(Double.init).map(Date.init(timeIntervalSince1970:)) ?? Date()
         DemoData.fill(db, now: now)
 
         let model = AppModel(db: db, live: false)
         model.tracker.simulateCurrentApp("Xcode")
+        model.tracker.simulateNow(now)
         let categoryID = { (name: String) in db.categories().first { $0.name == name }?.id }
         let files = DemoData.shelfFiles()
         prefetchThumbnails(files)

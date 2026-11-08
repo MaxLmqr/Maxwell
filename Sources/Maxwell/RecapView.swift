@@ -18,29 +18,14 @@ struct RecapView: View {
         _expanded = State(initialValue: Set([previewExpanded].compactMap { $0 }))
     }
 
-    struct Bucket: Identifiable {
-        let interval: DateInterval
-        let byCategory: [CategoryID: TimeInterval]
-        var total: TimeInterval { byCategory.values.reduce(0, +) }
-        var id: Date { interval.start }
-    }
-
     var body: some View {
         // Lire ces valeurs abonne la vue aux ticks du tracker et aux changements de catégories.
         let now = tracker.lastUpdate
         let _ = categorizer.revision
-        let db = tracker.db
         let period = navigation.period
-        let interval = period.interval(containing: navigation.referenceDate)
+        let recap = Recap(db: tracker.db, period: period, containing: navigation.referenceDate, now: now)
+        let interval = recap.interval
         let isCurrent = interval.contains(Date())
-        let ranking = CategoryRanking(durations: db.durationByCategory(in: interval), categories: db.categories())
-        let usage = db.usageByApp(in: interval)
-        let previousTotal = db.totalDuration(in: period.previousInterval(before: interval, now: now))
-        let buckets = period.buckets(of: interval).map {
-            Bucket(interval: $0, byCategory: db.durationByCategory(in: $0))
-        }
-        let activeBuckets = buckets.filter { $0.total >= 60 }.count
-        let average = activeBuckets > 0 ? ranking.total / Double(activeBuckets) : 0
 
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -55,21 +40,21 @@ struct RecapView: View {
                 }
 
                 HStack(alignment: .top, spacing: 44) {
-                    metric("Temps actif") { BigNumber(formatDuration(ranking.total), size: 36) }
+                    metric("Temps actif") { BigNumber(formatDuration(recap.total), size: 36) }
                     if period == .day {
-                        metric("Apps utilisées") { Text("\(Set(usage.map(\.bundleID)).count)") }
+                        metric("Apps utilisées") { Text("\(recap.appCount)") }
                     } else {
-                        metric("Par jour actif") { Text(formatDuration(average)) }
+                        metric("Par jour actif") { Text(formatDuration(recap.activeDayAverage)) }
                     }
-                    metric(period.comparisonLabel) { DeltaLabel(current: ranking.total, previous: previousTotal) }
+                    metric(period.comparisonLabel) { DeltaLabel(change: recap.change) }
                     Spacer(minLength: 0)
                 }
 
-                RecapChart(period: period, interval: interval, buckets: buckets, ranking: ranking, hovered: hovered,
-                           average: period == .day ? nil : average, selected: $selectedBucket)
+                RecapChart(period: period, recap: recap, hovered: hovered,
+                           average: period == .day ? nil : recap.activeDayAverage, selected: $selectedBucket)
                     .frame(height: 210)
 
-                categories(ranking: ranking, usage: usage)
+                categories(recap: recap)
             }
             .padding(.horizontal, 28)
             .padding(.top, 18)
@@ -125,7 +110,7 @@ struct RecapView: View {
     }
 
     @ViewBuilder
-    private func categories(ranking: CategoryRanking, usage: [AppUsage]) -> some View {
+    private func categories(recap: Recap) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Catégories").font(.system(size: 13, weight: .semibold))
@@ -137,20 +122,19 @@ struct RecapView: View {
             }
             .padding(.horizontal, 10)
 
-            if ranking.entries.isEmpty {
+            if recap.categories.isEmpty {
                 Text("Aucune activité sur cette période.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
             } else {
-                let longest = ranking.entries[0].duration
+                let longest = recap.categories[0].duration
                 VStack(spacing: 2) {
-                    ForEach(ranking.entries) { entry in
-                        let apps = usage.filter { $0.categoryID == entry.id }
+                    ForEach(recap.categories) { entry in
                         let isOpen = expanded.contains(entry.id)
-                        CategoryRow(entry: entry, subjects: apps.map(\.subject), longest: longest,
-                                    total: ranking.total, isHovered: hovered == entry.id, isExpanded: isOpen)
+                        CategoryRow(entry: entry, subjects: entry.subjects.map(\.subject), longest: longest,
+                                    total: recap.total, isHovered: hovered == entry.id, isExpanded: isOpen)
                             .onHover { inside in
                                 if inside { hovered = entry.id } else if hovered == entry.id { hovered = nil }
                             }
@@ -160,17 +144,15 @@ struct RecapView: View {
                                 }
                             }
                         if isOpen {
-                            let small = apps.filter(\.isSmallSite)
-                            // Une catégorie qui n'a que de petits sites les montre tous.
-                            let foldsSmallSites = !small.isEmpty && small.count < apps.count
-                            let showsAll = showingAll.contains(entry.id) || !foldsSmallSites
+                            let folded = entry.foldedSites
+                            let showsAll = showingAll.contains(entry.id) || folded.isEmpty
                             VStack(spacing: 0) {
-                                ForEach(showsAll ? apps : apps.filter { !$0.isSmallSite }) { app in
+                                ForEach(showsAll ? entry.subjects : entry.visibleSubjects) { app in
                                     AppRow(app: app, share: app.duration / entry.duration, iconSize: 16)
                                         .categoryMenu(for: app.subject, current: app.categoryID)
                                 }
-                                if foldsSmallSites {
-                                    SmallSitesToggle(count: small.count, showsAll: showsAll) {
+                                if !folded.isEmpty {
+                                    SmallSitesToggle(count: folded.count, showsAll: showsAll) {
                                         withAnimation(.easeOut(duration: 0.15)) {
                                             if showsAll { showingAll.remove(entry.id) } else { showingAll.insert(entry.id) }
                                         }
@@ -189,7 +171,7 @@ struct RecapView: View {
 }
 
 private struct CategoryRow: View {
-    let entry: CategoryRanking.Entry
+    let entry: Recap.Category
     let subjects: [Subject]
     let longest: TimeInterval
     let total: TimeInterval
@@ -216,7 +198,7 @@ private struct CategoryRow: View {
                 .monospacedDigit()
                 GeometryReader { geo in
                     Capsule()
-                        .fill(entry.isColored ? entry.swatch.fill : Color.primary.opacity(0.16))
+                        .fill(entry.isPrincipal ? entry.swatch.fill : Color.primary.opacity(0.16))
                         .frame(width: max(geo.size.width * entry.duration / longest, 3))
                 }
                 .frame(height: 4)
@@ -267,9 +249,7 @@ private struct SmallSitesToggle: View {
 /// Au survol d'une catégorie, seule sa part reste en couleur ; au survol d'une barre, une info-bulle donne le total.
 private struct RecapChart: View {
     let period: Period
-    let interval: DateInterval
-    let buckets: [RecapView.Bucket]
-    let ranking: CategoryRanking
+    let recap: Recap
     let hovered: CategoryID?
     let average: TimeInterval?
     @Binding var selected: Date?
@@ -283,6 +263,9 @@ private struct RecapChart: View {
     }
 
     private var unit: (divisor: Double, label: String) { period == .day ? (60, "min") : (3600, "h") }
+
+    private var buckets: [Recap.Bucket] { recap.buckets }
+    private var interval: DateInterval { recap.interval }
 
     var body: some View {
         let maxTotal = buckets.map(\.total).max() ?? 0
@@ -405,8 +388,8 @@ private struct RecapChart: View {
             .foregroundStyle(emphasized ? Color.primary : Color(nsColor: .tertiaryLabelColor))
     }
 
-    private func tooltip(for bucket: RecapView.Bucket) -> some View {
-        let main = bucket.byCategory.max { $0.value < $1.value }.flatMap { ranking.entry($0.key) }
+    private func tooltip(for bucket: Recap.Bucket) -> some View {
+        let main = bucket.byCategory.max { $0.value < $1.value }.flatMap { recap.category($0.key) }
         return VStack(alignment: .leading, spacing: 2) {
             Text(period.bucketTitle(for: bucket.interval.start))
                 .font(.system(size: 11))
@@ -429,19 +412,18 @@ private struct RecapChart: View {
     /// Empile les quatre catégories principales puis « les autres », avec un léger jour entre chaque part.
     private func makeSegments(gap: Double) -> [Segment] {
         var segments: [Segment] = []
-        let topCategories = Array(ranking.colored)
+        let principal = Array(recap.principal)
         for bucket in buckets where bucket.total >= 1 {
             var parts: [(key: String, value: Double, fill: Color)]
-            if let hovered, let entry = ranking.entry(hovered) {
+            if let hovered, let entry = recap.category(hovered) {
                 let value = bucket.byCategory[hovered] ?? 0
                 // Hors des quatre premières, la ligne est grise : le survol aussi, pour ne pas
                 // emprunter la teinte d'une catégorie colorée.
-                let highlight = entry.isColored ? entry.swatch.fill : Color.primary.opacity(0.4)
+                let highlight = entry.isPrincipal ? entry.swatch.fill : Color.primary.opacity(0.4)
                 parts = [("h", value, highlight), ("rest", bucket.total - value, Theme.emptyBar)]
             } else {
-                let values = topCategories.map { bucket.byCategory[$0.id] ?? 0 }
-                parts = zip(topCategories, values).map { ("\($0.id)", $1, $0.fill) }
-                parts.append(("others", bucket.total - values.reduce(0, +), Theme.othersFill))
+                parts = principal.map { ("\($0.id)", bucket.byCategory[$0.id] ?? 0, $0.fill) }
+                parts.append(("others", bucket.others, Theme.othersFill))
             }
 
             var y = 0.0

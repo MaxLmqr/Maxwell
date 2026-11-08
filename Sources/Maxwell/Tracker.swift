@@ -198,4 +198,9 @@ extension Tracker {
     func simulateCurrentApp(_ name: String) {
         currentAppName = name
     }
+
+    /// Pour les captures de l'interface : fige l'heure que voient les vues.
+    func simulateNow(_ date: Date) {
+        lastUpdate = date
+    }
 }

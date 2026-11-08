@@ -19,6 +19,11 @@ struct Recap {
         case notEnoughData
         /// Pourcentage arrondi : + 12 pour une hausse de 12 %.
         case percent(Int)
+
+        init(current: TimeInterval, previous: TimeInterval) {
+            guard previous >= Recap.comparisonThreshold else { self = .notEnoughData; return }
+            self = .percent(Int(((current - previous) / previous * 100).rounded()))
+        }
     }
 
     struct Category: Identifiable {
@@ -29,12 +34,16 @@ struct Recap {
         /// Rang dans la période, 0 pour la plus utilisée.
         let rank: Int
         let swatch: Theme.Swatch
-        /// Les Apps et les Sites montrés d'emblée dans le détail, du plus long au plus court.
+        /// Les Apps et les Sites de la Catégorie, du plus long au plus court.
         let subjects: [AppUsage]
         /// Les petits Sites, repliés derrière « Tout afficher ». Vide quand la Catégorie
         /// n'a que de petits Sites : ils sont alors tous montrés.
         let foldedSites: [AppUsage]
         var isPrincipal: Bool { rank < Recap.principalCount }
+        /// Les Apps et les Sites montrés d'emblée dans le détail.
+        var visibleSubjects: [AppUsage] {
+            foldedSites.isEmpty ? subjects : subjects.filter { !$0.isSmallSite }
+        }
     }
 
     /// Un jour du Récap d'une semaine ou d'un mois, une heure de celui d'un jour.
@@ -63,10 +72,7 @@ struct Recap {
     var others: ArraySlice<Category> { categories.dropFirst(Self.principalCount) }
     var othersDuration: TimeInterval { others.reduce(0) { $0 + $1.duration } }
 
-    var change: Change {
-        guard previousTotal >= Self.comparisonThreshold else { return .notEnoughData }
-        return .percent(Int(((total - previousTotal) / previousTotal * 100).rounded()))
-    }
+    var change: Change { Change(current: total, previous: previousTotal) }
 
     /// Temps actif moyen par Jour actif (par heure active dans le Récap d'un jour).
     var activeDayAverage: TimeInterval {
@@ -92,8 +98,7 @@ struct Recap {
             let folds = !small.isEmpty && small.count < subjects.count
             return Category(id: entry.id, name: entry.name, symbol: entry.symbol, duration: entry.duration,
                             rank: entry.rank, swatch: entry.swatch,
-                            subjects: folds ? subjects.filter { !$0.isSmallSite } : subjects,
-                            foldedSites: folds ? small : [])
+                            subjects: subjects, foldedSites: folds ? small : [])
         }
         appCount = Set(usage.map(\.bundleID)).count
 

@@ -33,7 +33,7 @@ struct MenuBarView: View {
                 BigNumber(formatDuration(ranking.total), size: 32)
                 if yesterday >= 60 {
                     HStack(spacing: 4) {
-                        DeltaLabel(current: ranking.total, previous: yesterday)
+                        DeltaLabel(change: Recap.Change(current: ranking.total, previous: yesterday))
                         Text("vs hier")
                     }
                     .font(.system(size: 11))
