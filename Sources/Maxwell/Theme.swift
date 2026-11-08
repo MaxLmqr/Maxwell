@@ -1,33 +1,47 @@
 import AppKit
 import SwiftUI
 
-/// Le vert de Maxwell marque ce qui compte : l'app en cours et les catégories principales.
-/// Tout le reste reste en gris système, qui suit le mode sombre.
+/// Le vert de Maxwell marque l'app elle-même : l'app en cours, les liens, les interrupteurs.
+/// Chaque catégorie a sa propre teinte, la même d'une période à l'autre ; le reste est en gris système.
 enum Theme {
     static let accent = adaptive(light: 0x1D9E75, dark: 0x34B88B)
     static let neutralBar = Color.primary.opacity(0.10)
     static let emptyBar = Color.primary.opacity(0.06)
 
-    /// Rampe d'une seule teinte pour les quatre catégories les plus utilisées d'une période :
-    /// plus une catégorie compte, plus elle est proche du vert de l'app.
-    static let rampFills: [Color] = [
-        adaptive(light: 0x1D9E75, dark: 0x34B88B),
-        adaptive(light: 0x4FB792, dark: 0x26906E),
-        adaptive(light: 0x8DD1B6, dark: 0x1D6E55),
-        adaptive(light: 0xC4E7D8, dark: 0x17513F),
+    struct Swatch {
+        let fill: Color
+        /// Couleur du pictogramme posé sur la teinte, choisie pour rester lisible.
+        let glyph: Color
+    }
+
+    /// Une teinte par catégorie, dans l'ordre des catégories par défaut :
+    /// Développement, IA, Communication, Réunions, Design, Écriture, Navigation, Divertissement, Outils, Système.
+    static let palette: [Swatch] = [
+        swatch(light: 0x2F7DD3, dark: 0x4C93E6),                      // bleu
+        swatch(light: 0x8257D6, dark: 0x9C7BEA),                      // violet
+        swatch(light: 0x1D9E75, dark: 0x2FB386),                      // vert
+        swatch(light: 0xE8822A, dark: 0xEE9445),                      // orange
+        swatch(light: 0xD9487E, dark: 0xE66694),                      // rose
+        swatch(light: 0xE2AE1F, dark: 0xE7B93A, glyph: 0x4A3500),    // ambre
+        swatch(light: 0x1695B0, dark: 0x2DAEC6),                      // turquoise
+        swatch(light: 0xD9453B, dark: 0xE65F55),                      // rouge
+        swatch(light: 0x86A62E, dark: 0x9AB944, glyph: 0x263300),    // olive
+        swatch(light: 0x6B7A8F, dark: 0x8593A6),                      // ardoise
     ]
-    /// Couleur du pictogramme posé sur chaque teinte de la rampe, choisie pour rester lisible.
-    static let rampGlyphs: [Color] = [
-        adaptive(light: 0xFFFFFF, dark: 0x052A1E),
-        adaptive(light: 0xFFFFFF, dark: 0xFFFFFF),
-        adaptive(light: 0x0B5C46, dark: 0xFFFFFF),
-        adaptive(light: 0x0B5C46, dark: 0xBFE5D5),
-    ]
+    /// « À classer » n'a pas de teinte à elle.
+    static let uncategorized = swatch(light: 0xA3A8AF, dark: 0x6E747C)
+
+    /// La teinte attitrée d'une catégorie.
+    static func swatch(for id: CategoryID) -> Swatch {
+        id == uncategorizedID ? uncategorized : palette[Int((id - 1) % Int64(palette.count))]
+    }
+
     /// Les catégories au-delà de la quatrième.
     static let othersFill = Color.primary.opacity(0.09)
 
-    static func fill(rank: Int) -> Color { rank < rampFills.count ? rampFills[rank] : othersFill }
-    static func glyph(rank: Int) -> Color { rank < rampGlyphs.count ? rampGlyphs[rank] : .secondary }
+    private static func swatch(light: UInt32, dark: UInt32, glyph: UInt32 = 0xFFFFFF) -> Swatch {
+        Swatch(fill: adaptive(light: light, dark: dark), glyph: adaptive(light: glyph, dark: glyph))
+    }
 
     private static func adaptive(light: UInt32, dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -41,7 +55,7 @@ enum Theme {
 }
 
 /// Les catégories d'une période, de la plus utilisée à la moins utilisée.
-/// Leur rang donne leur couleur : les quatre premières prennent la rampe de vert.
+/// Les quatre premières prennent leur teinte attitrée, les autres restent en gris.
 struct CategoryRanking {
     struct Entry: Identifiable {
         let id: CategoryID
@@ -49,11 +63,14 @@ struct CategoryRanking {
         let symbol: String
         let duration: TimeInterval
         let rank: Int
-        var fill: Color { Theme.fill(rank: rank) }
-        var glyph: Color { Theme.glyph(rank: rank) }
+        /// La teinte de la catégorie, même quand elle n'est pas parmi les quatre premières.
+        let swatch: Theme.Swatch
+        var isColored: Bool { rank < CategoryRanking.colorCount }
+        var fill: Color { isColored ? swatch.fill : Theme.othersFill }
+        var glyph: Color { isColored ? swatch.glyph : .secondary }
     }
 
-    static let colorCount = Theme.rampFills.count
+    static let colorCount = 4
 
     let entries: [Entry]
     var total: TimeInterval { entries.reduce(0) { $0 + $1.duration } }
@@ -61,17 +78,27 @@ struct CategoryRanking {
 
     init(durations: [CategoryID: TimeInterval], categories: [Category]) {
         let byID = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0) })
-        entries = durations
+        let sorted = durations
             .filter { $0.value >= 1 }
             .sorted { $0.value > $1.value }
-            .enumerated()
-            .map { rank, item in
-                let category = byID[item.key]
-                return Entry(id: item.key,
-                             name: category?.name ?? "À classer",
-                             symbol: category?.symbol ?? Category.uncategorizedSymbol,
-                             duration: item.value, rank: rank)
+        // Au-delà de dix catégories, deux peuvent partager une teinte :
+        // parmi les quatre colorées, la seconde prend alors la prochaine teinte libre.
+        var used: [Int] = []
+        entries = sorted.enumerated().map { rank, item in
+            let category = byID[item.key]
+            var swatch = Theme.swatch(for: item.key)
+            if rank < Self.colorCount, item.key != uncategorizedID {
+                let count = Theme.palette.count
+                var index = Int((item.key - 1) % Int64(count))
+                while used.contains(index) { index = (index + 1) % count }
+                used.append(index)
+                swatch = Theme.palette[index]
             }
+            return Entry(id: item.key,
+                         name: category?.name ?? "À classer",
+                         symbol: category?.symbol ?? Category.uncategorizedSymbol,
+                         duration: item.value, rank: rank, swatch: swatch)
+        }
     }
 
     func entry(_ id: CategoryID) -> Entry? { entries.first { $0.id == id } }

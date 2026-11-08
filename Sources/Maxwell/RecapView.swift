@@ -220,7 +220,7 @@ private struct CategoryRow: View {
                 .monospacedDigit()
                 GeometryReader { geo in
                     Capsule()
-                        .fill(entry.rank < CategoryRanking.colorCount ? entry.fill : Color.primary.opacity(0.16))
+                        .fill(entry.isColored ? entry.fill : Color.primary.opacity(0.16))
                         .frame(width: max(geo.size.width * entry.duration / longest, 3))
                 }
                 .frame(height: 4)
@@ -440,9 +440,9 @@ private struct RecapChart: View {
         let topCategories = Array(ranking.colored)
         for bucket in buckets where bucket.total >= 1 {
             var parts: [(key: String, value: Double, fill: Color)]
-            if let hovered, ranking.entry(hovered) != nil {
+            if let hovered, let entry = ranking.entry(hovered) {
                 let value = bucket.byCategory[hovered] ?? 0
-                parts = [("h", value, Theme.accent), ("rest", bucket.total - value, Theme.emptyBar)]
+                parts = [("h", value, entry.swatch.fill), ("rest", bucket.total - value, Theme.emptyBar)]
             } else {
                 let values = topCategories.map { bucket.byCategory[$0.id] ?? 0 }
                 parts = zip(topCategories, values).map { ("\($0.id)", $1, $0.fill) }

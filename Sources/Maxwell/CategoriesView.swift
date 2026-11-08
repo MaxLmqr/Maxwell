@@ -53,13 +53,14 @@ struct CategoriesView: View {
             List(selection: Binding(get: { current }, set: { selection = $0 })) {
                 if uncategorized > 0 {
                     SidebarRow(name: "À classer", symbol: Category.uncategorizedSymbol,
-                               count: uncategorized, hidden: false)
+                               count: uncategorized, hidden: false, tint: Theme.uncategorized.fill)
                         .tag(uncategorizedID)
                 }
                 Section {
                     ForEach(categories) { category in
                         SidebarRow(name: category.name, symbol: category.symbol,
-                                   count: counts[category.id] ?? 0, hidden: category.hidden)
+                                   count: counts[category.id] ?? 0, hidden: category.hidden,
+                                   tint: Theme.swatch(for: category.id).fill)
                             .tag(category.id)
                     }
                 }
@@ -112,6 +113,7 @@ private struct SidebarRow: View {
     let symbol: String
     let count: Int
     let hidden: Bool
+    let tint: Color
 
     var body: some View {
         HStack {
@@ -119,6 +121,7 @@ private struct SidebarRow: View {
                 Text(name).lineLimit(1)
             } icon: {
                 Image(systemName: symbol)
+                    .foregroundStyle(hidden ? AnyShapeStyle(.secondary) : AnyShapeStyle(tint))
             }
             .foregroundStyle(hidden ? .secondary : .primary)
             Spacer()
@@ -192,8 +195,8 @@ private struct CategoryDetail: View {
                         }
                     }
                 } label: {
-                    CategoryBadge(symbol: category.symbol, fill: Theme.accent.opacity(0.14),
-                                  glyph: Theme.accent, size: 40)
+                    CategoryBadge(symbol: category.symbol, fill: Theme.swatch(for: category.id).fill.opacity(0.16),
+                                  glyph: Theme.swatch(for: category.id).fill, size: 40)
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
