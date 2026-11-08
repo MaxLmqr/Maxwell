@@ -44,14 +44,15 @@ Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [G
 | `AppModel.swift` | Objets de l'app et fenêtres (récap, catégories) |
 | `Tracker.swift` | Détection de l'app active, de l'inactivité et de la veille |
 | `ChromeTab.swift` | Site de l'onglet actif de Chrome, lu par Apple Events |
-| `Database.swift` | Stockage SQLite : sessions, catégories des apps et des sites, agrégats |
+| `Database.swift` | Stockage SQLite : sessions, catégories des apps et des sites |
+| `Recap.swift` | Le Récap d'une période : total, comparaison, Catégories classées, répartition |
 | `Categorizer.swift` | Classement automatique des apps par Apple Intelligence |
-| `RecapNotifier.swift` | Notifications de récap hebdo et mensuel |
+| `RecapNotifier.swift` | Notifications du Récap de la semaine et du mois |
 | `Updater.swift` | Mises à jour par Sparkle |
-| `MenuBarView.swift` | Résumé du jour dans la barre de menus |
-| `RecapView.swift` | Fenêtre de récap par catégorie, avec graphique |
+| `MenuBarView.swift` | Récap du jour dans la barre de menus |
+| `RecapView.swift` | Fenêtre du Récap par catégorie, avec graphique |
 | `CategoriesView.swift` | Gestion des catégories et de la catégorie de chaque app |
-| `Theme.swift` | Couleurs, rang des catégories et composants partagés |
+| `Theme.swift` | Couleurs, teinte de chaque catégorie et composants partagés |
 | `Period.swift` | Découpage jour / semaine / mois |
 | `Snapshot.swift`, `DemoData.swift` | Captures de l'interface avec des données de démo |
 | `Shelf/ShakeDetector.swift` | Reconnaissance de la Secousse, à partir des positions de la souris |
@@ -65,13 +66,15 @@ Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [G
 
 ## Design
 
-Le vert de l'app marque ce qui compte : l'app en cours et les quatre catégories les plus utilisées de la période, de la plus foncée à la plus claire. Les autres restent en gris. Les captures de référence sont dans `docs/design/`.
+Le vert de l'app marque l'app elle-même : l'app en cours, les liens, les interrupteurs. Chaque catégorie a sa propre teinte, la même d'une période à l'autre ; dans un Récap, seules les quatre principales sont en couleur, les autres restent en gris. Les captures de référence sont dans `docs/design/`.
 
 Pour redessiner chaque écran en PNG, en clair et en sombre, avec des données de démo et sans toucher aux tiennes :
 
 ```bash
 ./build.sh && build/Maxwell.app/Contents/MacOS/Maxwell --snapshot captures
 ```
+
+`MAXWELL_SNAPSHOT_NOW` (secondes depuis 1970) fige l'heure des données de démo : deux séries faites à la même heure figée montrent les mêmes chiffres, ce qui permet de vérifier qu'un changement de code ne les a pas modifiés.
 
 Les effets Liquid Glass (segment sélectionné, sélection de la barre latérale, fond des boutons de la barre d'outils) sont dessinés par macOS à l'écran et n'apparaissent pas sur ces captures.
 
