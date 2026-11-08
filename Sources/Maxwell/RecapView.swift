@@ -1,10 +1,6 @@
 import Charts
 import SwiftUI
 
-/// En dessous de ce temps sur la période, un Site n'apparaît dans le détail de sa catégorie
-/// qu'avec « Tout afficher ».
-private let smallSiteDuration: TimeInterval = 10 * 60
-
 struct RecapView: View {
     @EnvironmentObject private var tracker: Tracker
     @EnvironmentObject private var categorizer: Categorizer
@@ -239,10 +235,6 @@ private struct CategoryRow: View {
     }
 }
 
-private extension AppUsage {
-    var isSmallSite: Bool { site != nil && duration < smallSiteDuration }
-}
-
 /// Bas du détail d'une catégorie : montre ou cache ses petits sites.
 private struct SmallSitesToggle: View {
     let count: Int
@@ -256,7 +248,7 @@ private struct SmallSitesToggle: View {
                     Text(showsAll ? "Afficher moins" : "Tout afficher")
                         .foregroundStyle(Theme.accent)
                     if !showsAll {
-                        Text("\(count) site\(count > 1 ? "s" : "") de moins de \(formatDuration(smallSiteDuration))")
+                        Text("\(count) site\(count > 1 ? "s" : "") de moins de \(formatDuration(Recap.smallSiteDuration))")
                             .foregroundStyle(.tertiary)
                     }
                 }

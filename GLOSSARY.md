@@ -46,6 +46,10 @@ La Catégorie des dialogues et utilitaires de macOS (notifications, autorisation
 Le résumé du Temps actif sur un jour, une semaine ou un mois : total, répartition et comparaison avec la période précédente.
 _Avoid_: Rapport, bilan, stats
 
+**Jour actif**:
+Un jour, ou une heure dans le Récap d'un jour, qui compte au moins 1 min de Temps actif. La moyenne d'un Récap se calcule sur les seuls Jours actifs.
+_Avoid_: Jour travaillé, jour utilisé
+
 ## Étagère
 
 **Étagère**:
