@@ -1,24 +1,174 @@
 import AppKit
 import FoundationModels
 
-/// Donne une catégorie à chaque app qui n'en a pas encore.
-/// Les dialogues d'Apple vont dans Système ; les autres apps sont classées par le modèle
-/// d'Apple Intelligence, sur le Mac, qui choisit obligatoirement dans la liste des catégories.
-/// Les sites ne sont pas classés : sans catégorie choisie par Max, ils suivent leur navigateur.
+/// Classe une App que Max n'a pas encore rangée. Deux implémentations :
+/// Apple Intelligence dans l'app, une fausse dans les tests.
+@MainActor
+protocol AppClassifier {
+    /// Pourquoi le classement automatique ne marche pas sur ce Mac ; nil s'il marche.
+    var unavailableReason: String? { get }
+    /// Un dialogue ou un agent de macOS, qui va d'office dans Système.
+    func isSystemApp(_ bundleID: String) -> Bool
+    /// La Catégorie choisie parmi `categories`, ou nil si le classement n'a pas abouti.
+    func classify(name: String, bundleID: String, among categories: [Category]) async -> CategoryID?
+}
+
+/// D'où vient la Catégorie d'une App ou d'un Site.
+enum CategoryOrigin: Equatable {
+    /// Pas encore de Catégorie : l'App attend le classement, le Site attend que Max en choisisse une
+    /// (ou que son navigateur en ait une).
+    case unclassified
+    /// Max l'a choisie.
+    case byMax
+    /// Un Site sans choix de Max suit la Catégorie de son navigateur.
+    case followsBrowser
+    /// Choisie automatiquement : par Apple Intelligence, ou Système pour un dialogue de macOS.
+    case automatic
+}
+
+extension KnownApp {
+    var origin: CategoryOrigin {
+        if categoryID == uncategorizedID { return .unclassified }
+        if manual { return .byMax }
+        return site == nil ? .automatic : .followsBrowser
+    }
+}
+
+/// La Catégorisation : la liste des Catégories, la Catégorie de chaque App et de chaque Site,
+/// et les choix de Max. Toute modification passe par ici, qui prévient les vues et relance le classement.
+/// Les Apps sans Catégorie sont classées par `AppClassifier` ; les Sites ne le sont jamais :
+/// sans Catégorie choisie par Max, ils suivent leur navigateur.
 @MainActor
 final class Categorizer: ObservableObject {
     /// Change à chaque modification des catégories : les vues l'observent pour se rafraîchir.
     @Published private(set) var revision = 0
     @Published private(set) var isRunning = false
 
-    let db: Database
+    private let db: Database
+    private let classifier: AppClassifier
     private var rerunRequested = false
+    private var running: Task<Void, Never>?
 
-    init(db: Database) {
+    /// Sans `classifier`, les Apps sont classées par Apple Intelligence.
+    init(db: Database, classifier: AppClassifier? = nil) {
         self.db = db
+        self.classifier = classifier ?? AppleIntelligenceClassifier()
     }
 
-    var availabilityMessage: String? {
+    var availabilityMessage: String? { classifier.unavailableReason }
+
+    // MARK: - Lecture
+
+    func categories() -> [Category] { db.categories() }
+
+    /// Toutes les Apps et tous les Sites déjà vus, avec leur Catégorie et son origine (`KnownApp.origin`).
+    func knownApps() -> [KnownApp] { db.knownApps() }
+
+    // MARK: - Choix de Max
+
+    /// Max range une App ou un Site dans une Catégorie : le classement automatique n'y touche plus.
+    func assign(_ categoryID: CategoryID, to subject: Subject) {
+        db.setCategory(categoryID, for: subject, manual: true)
+        changed()
+    }
+
+    /// Max retire son choix : une App repart au classement automatique, un Site suit de nouveau son navigateur.
+    func withdrawChoice(for subject: Subject) {
+        db.setCategory(uncategorizedID, for: subject, manual: false)
+        changed()
+    }
+
+    /// Renvoie l'identifiant de la nouvelle Catégorie, ou nil si le nom existe déjà.
+    @discardableResult
+    func addCategory(named name: String) -> CategoryID? {
+        let id = db.addCategory(name: name)
+        if id != nil { changed() }
+        return id
+    }
+
+    func rename(_ id: CategoryID, to name: String) {
+        db.renameCategory(id, to: name)
+        changed()
+    }
+
+    /// Les Apps et les Sites de la Catégorie supprimée redeviennent « À classer ».
+    func delete(_ id: CategoryID) {
+        db.deleteCategory(id)
+        changed()
+    }
+
+    func setSymbol(_ symbol: String, of id: CategoryID) {
+        db.setSymbol(id, symbol)
+        changed()
+    }
+
+    func setHidden(_ hidden: Bool, _ id: CategoryID) {
+        db.setHidden(id, hidden)
+        changed()
+    }
+
+    /// Oublie les Catégories choisies automatiquement et relance le classement. Les choix de Max restent.
+    func reclassifyAutomatic() {
+        db.clearAutomaticCategories()
+        changed()
+    }
+
+    // MARK: - Classement automatique
+
+    /// À appeler quand une app passe au premier plan.
+    func appSeen(_ bundleID: String) {
+        if db.categoryID(for: .app(bundleID)) == uncategorizedID { classifyPending() }
+    }
+
+    func classifyPending() {
+        guard !isRunning else {
+            rerunRequested = true
+            return
+        }
+        isRunning = true
+        running = Task {
+            repeat {
+                rerunRequested = false
+                await classifyUncategorizedApps()
+            } while rerunRequested
+            isRunning = false
+        }
+    }
+
+    /// Attend la fin du classement en cours, s'il y en a un. Sert aux tests.
+    func waitForClassification() async {
+        await running?.value
+    }
+
+    private func changed() {
+        revision += 1
+        classifyPending()
+    }
+
+    private func classifyUncategorizedApps() async {
+        let pending = db.knownApps().filter { $0.site == nil && $0.categoryID == uncategorizedID }
+        guard !pending.isEmpty else { return }
+        let categories = db.categories()
+
+        for app in pending {
+            if classifier.isSystemApp(app.bundleID), let system = categories.first(where: \.isSystem) {
+                db.setCategory(system.id, for: .app(app.bundleID), manual: false)
+            } else if let id = await classifier.classify(name: app.name, bundleID: app.bundleID,
+                                                         among: categories) {
+                db.setCategory(id, for: .app(app.bundleID), manual: false)
+            } else {
+                continue
+            }
+            revision += 1
+        }
+    }
+}
+
+/// Le classement par le modèle d'Apple Intelligence, sur le Mac, qui choisit obligatoirement
+/// dans la liste des catégories.
+@MainActor
+struct AppleIntelligenceClassifier: AppClassifier {
+    var unavailableReason: String? {
         switch SystemLanguageModel.default.availability {
         case .available:
             return nil
@@ -33,57 +183,8 @@ final class Categorizer: ObservableObject {
         }
     }
 
-    /// À appeler quand une app passe au premier plan.
-    func appSeen(_ bundleID: String) {
-        if db.categoryID(for: .app(bundleID)) == uncategorizedID { classifyPending() }
-    }
-
-    /// À appeler après toute modification faite par Max (catégorie d'une app ou d'un site, liste des catégories).
-    func changed() {
-        revision += 1
-        classifyPending()
-    }
-
-    func reclassifyAutomatic() {
-        db.clearAutomaticCategories()
-        changed()
-    }
-
-    func classifyPending() {
-        guard !isRunning else {
-            rerunRequested = true
-            return
-        }
-        isRunning = true
-        Task {
-            repeat {
-                rerunRequested = false
-                await classifyUncategorizedApps()
-            } while rerunRequested
-            isRunning = false
-        }
-    }
-
-    private func classifyUncategorizedApps() async {
-        let pending = db.knownApps().filter { $0.site == nil && $0.categoryID == uncategorizedID }
-        guard !pending.isEmpty else { return }
-        let categories = db.categories()
-        let modelAvailable = SystemLanguageModel.default.availability == .available
-
-        for app in pending {
-            if isAppleBackgroundApp(app.bundleID), let system = categories.first(where: \.isSystem) {
-                db.setCategory(system.id, for: .app(app.bundleID), manual: false)
-            } else if modelAvailable, let category = await askModel(app: app, categories: categories) {
-                db.setCategory(category.id, for: .app(app.bundleID), manual: false)
-            } else {
-                continue
-            }
-            revision += 1
-        }
-    }
-
     /// Dialogues et agents de macOS : apps Apple sans icône dans le Dock.
-    private func isAppleBackgroundApp(_ bundleID: String) -> Bool {
+    func isSystemApp(_ bundleID: String) -> Bool {
         guard bundleID.hasPrefix("com.apple.") else { return false }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
               let info = Bundle(url: url)?.infoDictionary else { return true }
@@ -105,7 +206,8 @@ final class Categorizer: ObservableObject {
         "Système": "composants de macOS : dialogues, agents, notifications, Réglages Système",
     ]
 
-    private func askModel(app: KnownApp, categories: [Category]) async -> Category? {
+    func classify(name: String, bundleID: String, among categories: [Category]) async -> CategoryID? {
+        guard SystemLanguageModel.default.availability == .available else { return nil }
         let names = categories.map(\.name)
         let list = categories
             .map { category in Self.hints[category.name].map { "- \(category.name) : \($0)" } ?? "- \(category.name)" }
@@ -120,12 +222,12 @@ final class Categorizer: ObservableObject {
                 \(list)
                 """)
             let response = try await session.respond(
-                to: "Application : \(app.name) (identifiant : \(app.bundleID))",
+                to: "Application : \(name) (identifiant : \(bundleID))",
                 schema: schema)
-            let name = try response.content.value(String.self)
-            return categories.first { $0.name == name }
+            let chosen = try response.content.value(String.self)
+            return categories.first { $0.name == chosen }?.id
         } catch {
-            NSLog("Maxwell classification error for \(app.bundleID): \(error)")
+            NSLog("Maxwell classification error for \(bundleID): \(error)")
             return nil
         }
     }

@@ -11,9 +11,8 @@ struct CategoriesView: View {
 
     var body: some View {
         let _ = categorizer.revision
-        let db = categorizer.db
-        let categories = db.categories()
-        let apps = db.knownApps()
+        let categories = categorizer.categories()
+        let apps = categorizer.knownApps()
         let counts = Dictionary(grouping: apps, by: \.categoryID).mapValues(\.count)
         let current = selection ?? categories.first?.id
 
@@ -95,17 +94,15 @@ struct CategoriesView: View {
             name = "Nouvelle catégorie \(suffix)"
             suffix += 1
         }
-        if let id = categorizer.db.addCategory(name: name) {
+        if let id = categorizer.addCategory(named: name) {
             selection = id
-            categorizer.changed()
         }
     }
 
     private func delete(_ category: Category?, categories: [Category]) {
         guard let category, !category.isSystem else { return }
-        categorizer.db.deleteCategory(category.id)
         selection = categories.first { $0.id != category.id }?.id
-        categorizer.changed()
+        categorizer.delete(category.id)
     }
 }
 
@@ -190,8 +187,7 @@ private struct CategoryDetail: View {
                 Menu {
                     ForEach(Category.symbolChoices, id: \.self) { symbol in
                         Button {
-                            categorizer.db.setSymbol(category.id, symbol)
-                            categorizer.changed()
+                            categorizer.setSymbol(symbol, of: category.id)
                         } label: {
                             Image(systemName: symbol)
                         }
@@ -229,8 +225,7 @@ private struct CategoryDetail: View {
                 Toggle("Dans les récaps", isOn: Binding(
                     get: { !category.hidden },
                     set: { visible in
-                        categorizer.db.setHidden(category.id, !visible)
-                        categorizer.changed()
+                        categorizer.setHidden(!visible, category.id)
                     }))
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -277,8 +272,7 @@ private struct CategoryDetail: View {
             name = category.name
             return
         }
-        categorizer.db.renameCategory(category.id, to: trimmed)
-        categorizer.changed()
+        categorizer.rename(category.id, to: trimmed)
     }
 }
 
@@ -318,13 +312,14 @@ private struct AppAssignmentRow: View {
     @ViewBuilder private var origin: some View {
         // « une app classée », « un site classé ».
         let classified = app.site == nil ? "classée" : "classé"
-        if current == nil {
+        switch current == nil ? .unclassified : app.origin {
+        case .unclassified:
             Text("Pas encore \(classified)")
-        } else if app.manual {
+        case .byMax:
             Text("\(classified.capitalized) par toi")
-        } else if app.site != nil {
+        case .followsBrowser:
             Text("Suit la catégorie de Chrome")
-        } else {
+        case .automatic:
             Label("Classée par Apple Intelligence", systemImage: "sparkles")
                 .labelStyle(.titleAndIcon)
         }
@@ -333,17 +328,15 @@ private struct AppAssignmentRow: View {
     @ViewBuilder private var moveMenu: some View {
         ForEach(categories.filter { $0.id != current?.id }) { category in
             Button {
-                categorizer.db.setCategory(category.id, for: app.subject, manual: true)
-                categorizer.changed()
+                categorizer.assign(category.id, to: app.subject)
             } label: {
                 Label(category.name, systemImage: category.symbol)
             }
         }
-        if app.manual {
+        if app.origin == .byMax {
             Divider()
             Button(app.site == nil ? "Laisser l'IA choisir" : "Suivre la catégorie de Chrome") {
-                categorizer.db.setCategory(uncategorizedID, for: app.subject, manual: false)
-                categorizer.changed()
+                categorizer.withdrawChoice(for: app.subject)
             }
         }
     }

@@ -456,10 +456,9 @@ private struct CategoryMenu: ViewModifier {
     func body(content: Content) -> some View {
         content.contextMenu {
             Text("Catégorie")
-            ForEach(categorizer.db.categories()) { category in
+            ForEach(categorizer.categories()) { category in
                 Button {
-                    categorizer.db.setCategory(category.id, for: subject, manual: true)
-                    categorizer.changed()
+                    categorizer.assign(category.id, to: subject)
                 } label: {
                     if category.id == current {
                         Label(category.name, systemImage: "checkmark")
