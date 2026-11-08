@@ -99,6 +99,24 @@ final class CategorizerTests {
         #expect(known(.site("github.com"))?.origin == .unclassified)
     }
 
+    @Test func aBrowserSeenOnlyOnSitesIsStillClassified() async {
+        // Le premier classement échoue, et ensuite Chrome n'a plus que des Sessions avec un Site.
+        classifier.unavailableReason = "indisponible"
+        seen(chrome, site: "github.com")
+        await classify()
+        #expect(known(.site("github.com"))?.origin == .unclassified)
+
+        classifier.unavailableReason = nil
+        classifier.answers[chrome] = "Navigation"
+        seen(chrome, site: "mail.google.com")
+        await classify()
+
+        #expect(known(.site("github.com"))?.origin == .followsBrowser)
+        #expect(known(.site("github.com"))?.categoryID == category("Navigation"))
+        // Chrome n'a toujours pas de ligne à lui : seuls ses Sites apparaissent.
+        #expect(known(.app(chrome)) == nil)
+    }
+
     @Test func aSiteFollowsItsBrowserUntilMaxChoosesForIt() async {
         classifier.answers[chrome] = "Navigation"
         seen(chrome)

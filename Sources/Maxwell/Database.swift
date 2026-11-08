@@ -289,6 +289,26 @@ final class Database {
 
     // MARK: - Catégorie des apps et des sites
 
+    /// Les Apps vues au moins une fois, avec ou sans Site, qui n'ont pas encore de Catégorie,
+    /// de la plus utilisée à la moins utilisée. Un navigateur dont toutes les Sessions ont un Site
+    /// en fait partie, même s'il n'a pas de ligne à lui dans `knownApps`.
+    func uncategorizedApps() -> [(bundleID: String, name: String)] {
+        var result: [(bundleID: String, name: String)] = []
+        run("""
+            SELECT s.bundle_id, MAX(s.app_name)
+            FROM sessions s
+            LEFT JOIN app_categories ac ON ac.bundle_id = s.bundle_id
+            WHERE COALESCE(ac.category_id, ?) = ?
+            GROUP BY s.bundle_id
+            ORDER BY SUM(s.ended_at - s.started_at) DESC
+            """, [uncategorizedID, uncategorizedID]
+        ) { stmt in
+            result.append((String(cString: sqlite3_column_text(stmt, 0)),
+                           String(cString: sqlite3_column_text(stmt, 1))))
+        }
+        return result
+    }
+
     func knownApps() -> [KnownApp] {
         var result: [KnownApp] = []
         run("""

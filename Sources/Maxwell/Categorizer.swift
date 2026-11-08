@@ -146,7 +146,7 @@ final class Categorizer: ObservableObject {
     }
 
     private func classifyUncategorizedApps() async {
-        let pending = db.knownApps().filter { $0.site == nil && $0.categoryID == uncategorizedID }
+        let pending = db.uncategorizedApps()
         guard !pending.isEmpty else { return }
         let categories = db.categories()
 
