@@ -14,26 +14,44 @@ enum Theme {
         let glyph: Color
     }
 
-    /// Une teinte par catégorie, dans l'ordre des catégories par défaut :
-    /// Développement, IA, Communication, Réunions, Design, Écriture, Navigation, Divertissement, Outils, Système.
+    /// Les teintes des catégories, dans l'ordre où les catégories par défaut sont créées
+    /// (`Database.defaultCategories`, puis Système) : les identifiants 1 à 10 leur reviennent.
     static let palette: [Swatch] = [
-        swatch(light: 0x2F7DD3, dark: 0x4C93E6),                      // bleu
-        swatch(light: 0x8257D6, dark: 0x9C7BEA),                      // violet
-        swatch(light: 0x1D9E75, dark: 0x2FB386),                      // vert
-        swatch(light: 0xE8822A, dark: 0xEE9445),                      // orange
-        swatch(light: 0xD9487E, dark: 0xE66694),                      // rose
-        swatch(light: 0xE2AE1F, dark: 0xE7B93A, glyph: 0x4A3500),    // ambre
-        swatch(light: 0x1695B0, dark: 0x2DAEC6),                      // turquoise
-        swatch(light: 0xD9453B, dark: 0xE65F55),                      // rouge
-        swatch(light: 0x86A62E, dark: 0x9AB944, glyph: 0x263300),    // olive
-        swatch(light: 0x6B7A8F, dark: 0x8593A6),                      // ardoise
+        swatch(light: 0x2F7DD3, dark: 0x4C93E6),                      // bleu : Développement
+        swatch(light: 0x8257D6, dark: 0x9C7BEA),                      // violet : IA
+        swatch(light: 0x1D9E75, dark: 0x2FB386),                      // vert : Communication
+        swatch(light: 0xE8822A, dark: 0xEE9445),                      // orange : Réunions
+        swatch(light: 0xD9487E, dark: 0xE66694),                      // rose : Design
+        swatch(light: 0xE2AE1F, dark: 0xE7B93A, glyph: 0x4A3500),    // ambre : Écriture et documents
+        swatch(light: 0x1695B0, dark: 0x2DAEC6),                      // turquoise : Navigation
+        swatch(light: 0xD9453B, dark: 0xE65F55),                      // rouge : Divertissement
+        swatch(light: 0x86A62E, dark: 0x9AB944, glyph: 0x263300),    // olive : Outils
+        swatch(light: 0x6B7A8F, dark: 0x8593A6),                      // ardoise : Système
     ]
     /// « À classer » n'a pas de teinte à elle.
     static let uncategorized = swatch(light: 0xA3A8AF, dark: 0x6E747C)
 
-    /// La teinte attitrée d'une catégorie.
-    static func swatch(for id: CategoryID) -> Swatch {
-        id == uncategorizedID ? uncategorized : palette[Int((id - 1) % Int64(palette.count))]
+    /// La teinte attitrée de chaque catégorie, qui ne dépend que de la liste des catégories :
+    /// celles créées d'office gardent la leur, chaque catégorie ajoutée ensuite prend la teinte
+    /// la moins portée. « À classer » prend `uncategorized`.
+    static func swatches(for categories: [Category]) -> [CategoryID: Swatch] {
+        var uses = [Int](repeating: 0, count: palette.count)
+        var result: [CategoryID: Swatch] = [uncategorizedID: uncategorized]
+        let byID = categories.sorted { $0.id < $1.id }
+        for category in byID where category.id <= palette.count {
+            uses[Int(category.id - 1)] += 1
+        }
+        for category in byID {
+            let slot: Int
+            if category.id <= palette.count {
+                slot = Int(category.id - 1)
+            } else {
+                slot = uses.indices.min { uses[$0] < uses[$1] }!
+                uses[slot] += 1
+            }
+            result[category.id] = palette[slot]
+        }
+        return result
     }
 
     /// Les catégories au-delà de la quatrième.
@@ -78,27 +96,19 @@ struct CategoryRanking {
 
     init(durations: [CategoryID: TimeInterval], categories: [Category]) {
         let byID = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0) })
-        let sorted = durations
+        let swatches = Theme.swatches(for: categories)
+        entries = durations
             .filter { $0.value >= 1 }
             .sorted { $0.value > $1.value }
-        // Au-delà de dix catégories, deux peuvent partager une teinte :
-        // parmi les quatre colorées, la seconde prend alors la prochaine teinte libre.
-        var used: [Int] = []
-        entries = sorted.enumerated().map { rank, item in
-            let category = byID[item.key]
-            var swatch = Theme.swatch(for: item.key)
-            if rank < Self.colorCount, item.key != uncategorizedID {
-                let count = Theme.palette.count
-                var index = Int((item.key - 1) % Int64(count))
-                while used.contains(index) { index = (index + 1) % count }
-                used.append(index)
-                swatch = Theme.palette[index]
+            .enumerated()
+            .map { rank, item in
+                let category = byID[item.key]
+                return Entry(id: item.key,
+                             name: category?.name ?? "À classer",
+                             symbol: category?.symbol ?? Category.uncategorizedSymbol,
+                             duration: item.value, rank: rank,
+                             swatch: swatches[item.key, default: Theme.uncategorized])
             }
-            return Entry(id: item.key,
-                         name: category?.name ?? "À classer",
-                         symbol: category?.symbol ?? Category.uncategorizedSymbol,
-                         duration: item.value, rank: rank, swatch: swatch)
-        }
     }
 
     func entry(_ id: CategoryID) -> Entry? { entries.first { $0.id == id } }

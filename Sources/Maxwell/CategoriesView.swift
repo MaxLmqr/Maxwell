@@ -48,6 +48,7 @@ struct CategoriesView: View {
     private func sidebar(categories: [Category], counts: [CategoryID: Int], current: CategoryID?) -> some View {
         let uncategorized = counts[uncategorizedID] ?? 0
         let selected = categories.first { $0.id == current }
+        let swatches = Theme.swatches(for: categories)
 
         return VStack(spacing: 0) {
             List(selection: Binding(get: { current }, set: { selection = $0 })) {
@@ -60,7 +61,7 @@ struct CategoriesView: View {
                     ForEach(categories) { category in
                         SidebarRow(name: category.name, symbol: category.symbol,
                                    count: counts[category.id] ?? 0, hidden: category.hidden,
-                                   tint: Theme.swatch(for: category.id).fill)
+                                   tint: swatches[category.id, default: Theme.uncategorized].fill)
                             .tag(category.id)
                     }
                 }
@@ -183,7 +184,8 @@ private struct CategoryDetail: View {
     }
 
     private var header: some View {
-        HStack(spacing: 14) {
+        let tint = Theme.swatches(for: categories)[category?.id ?? uncategorizedID, default: Theme.uncategorized].fill
+        return HStack(spacing: 14) {
             if let category {
                 Menu {
                     ForEach(Category.symbolChoices, id: \.self) { symbol in
@@ -195,8 +197,7 @@ private struct CategoryDetail: View {
                         }
                     }
                 } label: {
-                    CategoryBadge(symbol: category.symbol, fill: Theme.swatch(for: category.id).fill.opacity(0.16),
-                                  glyph: Theme.swatch(for: category.id).fill, size: 40)
+                    CategoryBadge(symbol: category.symbol, fill: tint.opacity(0.16), glyph: tint, size: 40)
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
@@ -204,8 +205,7 @@ private struct CategoryDetail: View {
                 .fixedSize()
                 .help("Changer le pictogramme")
             } else {
-                CategoryBadge(symbol: Category.uncategorizedSymbol, fill: Theme.othersFill,
-                              glyph: .secondary, size: 40)
+                CategoryBadge(symbol: Category.uncategorizedSymbol, fill: tint.opacity(0.16), glyph: tint, size: 40)
             }
 
             VStack(alignment: .leading, spacing: 2) {

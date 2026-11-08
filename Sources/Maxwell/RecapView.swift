@@ -220,7 +220,7 @@ private struct CategoryRow: View {
                 .monospacedDigit()
                 GeometryReader { geo in
                     Capsule()
-                        .fill(entry.isColored ? entry.fill : Color.primary.opacity(0.16))
+                        .fill(entry.isColored ? entry.swatch.fill : Color.primary.opacity(0.16))
                         .frame(width: max(geo.size.width * entry.duration / longest, 3))
                 }
                 .frame(height: 4)
