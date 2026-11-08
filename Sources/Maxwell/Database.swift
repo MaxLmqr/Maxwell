@@ -84,24 +84,6 @@ enum DatabaseError: Error {
 final class Database {
     private var db: OpaquePointer?
 
-    static let defaultCategories = [
-        "Développement", "IA", "Communication", "Réunions", "Design",
-        "Écriture et documents", "Navigation", "Divertissement", "Outils",
-    ]
-
-    private static let defaultSymbols = [
-        "Développement": "chevron.left.forwardslash.chevron.right",
-        "IA": "sparkles",
-        "Communication": "bubble.left.and.bubble.right",
-        "Réunions": "video",
-        "Design": "paintpalette",
-        "Écriture et documents": "doc.text",
-        "Navigation": "globe",
-        "Divertissement": "play.circle",
-        "Outils": "wrench.and.screwdriver",
-        "Système": "gearshape",
-    ]
-
     static var defaultURL: URL {
         let fm = FileManager.default
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -169,8 +151,8 @@ final class Database {
         if !columns(of: "categories").contains("symbol") {
             run("ALTER TABLE categories ADD COLUMN symbol TEXT", [])
         }
-        for (name, symbol) in Self.defaultSymbols {
-            run("UPDATE categories SET symbol = ? WHERE name = ? AND symbol IS NULL", [symbol, name])
+        for category in DefaultCategory.all {
+            run("UPDATE categories SET symbol = ? WHERE name = ? AND symbol IS NULL", [category.symbol, category.name])
         }
     }
 
@@ -187,8 +169,14 @@ final class Database {
         var count: Int64 = 0
         run("SELECT COUNT(*) FROM categories", []) { count = sqlite3_column_int64($0, 0) }
         guard count == 0 else { return }
-        for name in Self.defaultCategories { addCategory(name: name) }
-        run("INSERT INTO categories (name, position, hidden, is_system) VALUES ('Système', 1000, 1, 1)", [])
+        // Dans l'ordre de DefaultCategory.all : chacune reçoit l'identifiant qui la désigne ensuite.
+        for category in DefaultCategory.all {
+            if category.isSystem {
+                run("INSERT INTO categories (name, position, hidden, is_system) VALUES (?, 1000, 1, 1)", [category.name])
+            } else {
+                addCategory(name: category.name)
+            }
+        }
     }
 
     // MARK: - Sessions

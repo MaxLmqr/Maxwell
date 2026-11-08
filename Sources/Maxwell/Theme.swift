@@ -14,21 +14,9 @@ enum Theme {
         let glyph: Color
     }
 
-    /// Les teintes des catégories, dans l'ordre où les catégories par défaut sont créées
-    /// (`Database.defaultCategories`, puis Système) : les identifiants 1 à 10 leur reviennent.
-    static let palette: [Swatch] = [
-        swatch(light: 0x2F7DD3, dark: 0x4C93E6),                      // bleu : Développement
-        swatch(light: 0x8257D6, dark: 0x9C7BEA),                      // violet : IA
-        swatch(light: 0x1D9E75, dark: 0x2FB386),                      // vert : Communication
-        swatch(light: 0xE8822A, dark: 0xEE9445),                      // orange : Réunions
-        swatch(light: 0xD9487E, dark: 0xE66694),                      // rose : Design
-        swatch(light: 0xE2AE1F, dark: 0xE7B93A, glyph: 0x4A3500),    // ambre : Écriture et documents
-        swatch(light: 0x1695B0, dark: 0x2DAEC6),                      // turquoise : Navigation
-        // Rouge plus sombre que le vert : les deux restent distincts pour un œil qui les confond.
-        swatch(light: 0xB8352B, dark: 0xC9483E),                      // rouge : Divertissement
-        swatch(light: 0x86A62E, dark: 0x9AB944, glyph: 0x263300),    // olive : Outils
-        swatch(light: 0x6B7A8F, dark: 0x8593A6),                      // ardoise : Système
-    ]
+    /// Les teintes des Catégories par défaut, dans leur ordre de création ; les Catégories
+    /// ajoutées par Max les reprennent (voir `swatches(for:)`).
+    static let palette: [Swatch] = DefaultCategory.all.map(\.swatch)
     /// « À classer » n'a pas de teinte à elle.
     /// Gris assez soutenu pour que le pictogramme blanc reste lisible en mode clair.
     static let uncategorized = swatch(light: 0x80868F, dark: 0x6E747C)
@@ -59,7 +47,7 @@ enum Theme {
     /// Les catégories au-delà de la quatrième.
     static let othersFill = Color.primary.opacity(0.09)
 
-    private static func swatch(light: UInt32, dark: UInt32, glyph: UInt32 = 0xFFFFFF) -> Swatch {
+    static func swatch(light: UInt32, dark: UInt32, glyph: UInt32 = 0xFFFFFF) -> Swatch {
         Swatch(fill: adaptive(light: light, dark: dark), glyph: adaptive(light: glyph, dark: glyph))
     }
 

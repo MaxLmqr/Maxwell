@@ -35,13 +35,36 @@ final class DefaultCategoryOrderTests {
         }
     }
 
-    /// `Theme.palette` attribue ses teintes par identifiant : changer l'ordre de création
-    /// des catégories par défaut décalerait toutes les couleurs des nouvelles installations.
-    @Test func seedingOrderMatchesThePalette() throws {
+    /// Les Catégories par défaut sont reconnues par leur identifiant : changer l'ordre de création
+    /// décalerait leurs couleurs et leurs précisions pour Apple Intelligence sur les nouvelles installations.
+    @Test func seedingFollowsTheDefaultCatalogue() throws {
         let db = try Database(url: url)
-        let names = db.categories().sorted { $0.id < $1.id }.map(\.name)
-        #expect(names == ["Développement", "IA", "Communication", "Réunions", "Design",
-                          "Écriture et documents", "Navigation", "Divertissement", "Outils", "Système"])
-        #expect(names.count == Theme.palette.count)
+        let seeded = db.categories().sorted { $0.id < $1.id }
+        // Les installations existantes ont été créées dans cet ordre : il ne doit pas changer.
+        #expect(seeded.map(\.name) == ["Développement", "IA", "Communication", "Réunions", "Design",
+                                       "Écriture et documents", "Navigation", "Divertissement", "Outils", "Système"])
+        for category in seeded {
+            let expected = DefaultCategory.withID(category.id)
+            #expect(category.name == expected?.name)
+            #expect(category.symbol == expected?.symbol)
+            #expect(category.isSystem == expected?.isSystem)
+            #expect(category.hidden == category.isSystem)
+        }
+        #expect(Theme.palette.count == DefaultCategory.all.count)
+    }
+
+    @MainActor
+    @Test func aRenamedDefaultCategoryKeepsItsHint() throws {
+        let db = try Database(url: url)
+        let navigation = db.categories().first { $0.name == "Navigation" }!
+        db.renameCategory(navigation.id, to: "Web")
+        let renamed = db.categories().first { $0.id == navigation.id }!
+
+        #expect(AppleIntelligenceClassifier.promptLine(for: renamed)
+                == "- Web : navigateurs web uniquement : Safari, Chrome, Arc, Firefox")
+
+        let addedID = db.addCategory(name: "Lecture")
+        let added = db.categories().first { $0.id == addedID }!
+        #expect(AppleIntelligenceClassifier.promptLine(for: added) == "- Lecture")
     }
 }

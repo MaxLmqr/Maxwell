@@ -192,26 +192,16 @@ struct AppleIntelligenceClassifier: AppClassifier {
         return flag("LSUIElement") || flag("LSBackgroundOnly")
     }
 
-    /// Précisions pour les catégories par défaut ; une catégorie ajoutée par Max n'a que son nom.
-    private static let hints: [String: String] = [
-        "Développement": "éditeurs de code, IDE, terminaux, outils de développeur",
-        "IA": "assistants d'intelligence artificielle comme Claude ou ChatGPT",
-        "Communication": "messagerie et e-mail : Slack, Mail, Messages, WhatsApp",
-        "Réunions": "visioconférence : Zoom, Google Meet, Teams, FaceTime",
-        "Design": "création graphique : Figma, Sketch, retouche photo, icônes",
-        "Écriture et documents": "traitement de texte, notes, lecteurs de PDF comme Aperçu, tableurs, présentations",
-        "Navigation": "navigateurs web uniquement : Safari, Chrome, Arc, Firefox",
-        "Divertissement": "musique, vidéo, jeux, App Store",
-        "Outils": "utilitaires : Finder, lanceurs comme Raycast ou Alfred, captures d'écran comme Shottr, nettoyage, gestion de fichiers",
-        "Système": "composants de macOS : dialogues, agents, notifications, Réglages Système",
-    ]
+    /// Une ligne de la liste donnée au modèle. Une Catégorie par défaut garde sa précision même
+    /// si Max l'a renommée ; une Catégorie qu'il a ajoutée n'a que son nom.
+    static func promptLine(for category: Category) -> String {
+        DefaultCategory.withID(category.id).map { "- \(category.name) : \($0.hint)" } ?? "- \(category.name)"
+    }
 
     func classify(name: String, bundleID: String, among categories: [Category]) async -> CategoryID? {
         guard SystemLanguageModel.default.availability == .available else { return nil }
         let names = categories.map(\.name)
-        let list = categories
-            .map { category in Self.hints[category.name].map { "- \(category.name) : \($0)" } ?? "- \(category.name)" }
-            .joined(separator: "\n")
+        let list = categories.map(Self.promptLine).joined(separator: "\n")
         do {
             let schema = try GenerationSchema(
                 root: DynamicGenerationSchema(name: "Categorie", anyOf: names), dependencies: [])
