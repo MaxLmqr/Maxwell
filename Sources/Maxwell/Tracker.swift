@@ -1,9 +1,8 @@
 import AppKit
 import CoreGraphics
 
-/// Suit l'app au premier plan et enregistre une session à chaque changement.
-/// Dans Chrome, une session démarre aussi quand le site de l'onglet actif change.
-/// Le suivi s'interrompt en cas d'inactivité, de veille ou d'écran verrouillé.
+/// Branche le suivi sur le Mac : l'app au premier plan, l'inactivité, la veille, l'écran verrouillé
+/// et l'onglet actif de Chrome. Les règles qui en font des Sessions sont dans `SessionRecorder`.
 @MainActor
 final class Tracker: ObservableObject {
     @Published private(set) var currentAppName: String?
@@ -16,28 +15,11 @@ final class Tracker: ObservableObject {
     /// Appelé quand une app passe au premier plan, avec son identifiant.
     var onAppSeen: ((String) -> Void)?
 
-    /// Au-delà de ce délai sans clavier/souris, on considère que tu n'es plus là.
-    private let idleThreshold: TimeInterval = 180
     private let tickInterval: TimeInterval = 5
     /// Rythme de lecture de l'onglet actif, pendant que Chrome est devant.
     private let siteInterval: TimeInterval = 2
-    private let ignoredBundleIDs: Set<String> = [
-        "com.apple.loginwindow",
-        "com.apple.ScreenSaver.Engine",
-        Bundle.main.bundleIdentifier ?? "",
-    ]
 
-    /// La session en cours. `siteRead` passe à true quand Chrome a donné l'onglet actif.
-    private struct Current {
-        let id: Int64
-        let start: Date
-        let bundleID: String
-        let appName: String
-        var site: String?
-        var siteRead: Bool
-    }
-
-    private var current: Current?
+    private let recorder: SessionRecorder
     private let chromeTab = ChromeTab()
     private var readingSite = false
     private var timers: [Timer] = []
@@ -45,6 +27,15 @@ final class Tracker: ObservableObject {
 
     init(db: Database) {
         self.db = db
+        recorder = SessionRecorder(db: db, ignoredBundleIDs: [
+            "com.apple.loginwindow",
+            "com.apple.ScreenSaver.Engine",
+            Bundle.main.bundleIdentifier ?? "",
+        ])
+        recorder.onAppBegan = { [weak self] bundleID in
+            self?.onAppSeen?(bundleID)
+            self?.readSite()
+        }
     }
 
     func start() {
@@ -69,7 +60,8 @@ final class Tracker: ObservableObject {
         observe(distributed, Notification.Name("com.apple.screenIsUnlocked")) { [weak self] _ in self?.resume() }
 
         observe(NotificationCenter.default, NSApplication.willTerminateNotification) { [weak self] _ in
-            self?.closeCurrent(at: Date())
+            self?.recorder.close(at: Date())
+            self?.publish()
         }
 
         timers = [
@@ -80,7 +72,8 @@ final class Tracker: ObservableObject {
                 MainActor.assumeIsolated { self?.readSite() }
             },
         ]
-        begin(NSWorkspace.shared.frontmostApplication, at: Date())
+        recorder.start(with: Self.frontmost(), at: Date())
+        publish()
     }
 
     private func observe(_ center: NotificationCenter, _ name: Notification.Name,
@@ -91,105 +84,69 @@ final class Tracker: ObservableObject {
         observers.append((center, token))
     }
 
-    // MARK: - Machine à états
+    // MARK: - Évènements du Mac
+
+    private static func app(_ running: NSRunningApplication?) -> SessionRecorder.App? {
+        guard let running, let bundleID = running.bundleIdentifier else { return nil }
+        return SessionRecorder.App(bundleID: bundleID, name: running.localizedName ?? bundleID)
+    }
+
+    private static func frontmost() -> SessionRecorder.App? {
+        app(NSWorkspace.shared.frontmostApplication)
+    }
 
     private func tick() {
-        guard !isSuspended else { return }
         let now = Date()
         let idleSeconds = CGEventSource.secondsSinceLastEventType(
             .combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
-
-        if idleSeconds >= idleThreshold {
-            if !isIdle {
-                // On arrête la session au dernier geste, pas au moment où on s'en rend compte.
-                closeCurrent(at: now.addingTimeInterval(-idleSeconds))
-                isIdle = true
-            }
-        } else if isIdle {
-            isIdle = false
-            begin(NSWorkspace.shared.frontmostApplication, at: now)
-        } else if let current {
-            db.updateEnd(sessionID: current.id, end: now)
-        } else {
-            begin(NSWorkspace.shared.frontmostApplication, at: now)
+        if recorder.tick(idleSeconds: idleSeconds, frontmost: Self.frontmost, at: now) {
+            lastUpdate = now
         }
-        lastUpdate = now
+        publish()
     }
 
     private func switchTo(_ app: NSRunningApplication?) {
-        guard !isSuspended, !isIdle else { return }
         let now = Date()
-        closeCurrent(at: now)
-        begin(app, at: now)
-        lastUpdate = now
+        if recorder.activate(Self.app(app), at: now) {
+            lastUpdate = now
+        }
+        publish()
     }
 
     private func suspend() {
-        guard !isSuspended else { return }
-        closeCurrent(at: Date())
-        isSuspended = true
+        recorder.suspend(at: Date())
+        publish()
     }
 
     private func resume() {
-        guard isSuspended else { return }
-        isSuspended = false
-        isIdle = false
-        begin(NSWorkspace.shared.frontmostApplication, at: Date())
-        lastUpdate = Date()
-    }
-
-    private func begin(_ app: NSRunningApplication?, at date: Date) {
-        guard let app, let bundleID = app.bundleIdentifier, !ignoredBundleIDs.contains(bundleID) else {
-            current = nil
-            currentAppName = nil
-            return
+        if recorder.resume(with: Self.frontmost(), at: Date()) {
+            lastUpdate = Date()
         }
-        start(bundleID: bundleID, appName: app.localizedName ?? bundleID, site: nil, siteRead: false, at: date)
-        onAppSeen?(bundleID)
-        readSite()
+        publish()
     }
 
-    private func start(bundleID: String, appName: String, site: String?, siteRead: Bool, at date: Date) {
-        let id = db.insertSession(bundleID: bundleID, appName: appName, site: site, start: date, end: date)
-        current = Current(id: id, start: date, bundleID: bundleID, appName: appName, site: site, siteRead: siteRead)
-        currentAppName = site ?? appName
+    /// Recopie l'état du suivi pour les vues.
+    private func publish() {
+        if currentAppName != recorder.currentName { currentAppName = recorder.currentName }
+        if isIdle != recorder.isIdle { isIdle = recorder.isIdle }
+        if isSuspended != recorder.isSuspended { isSuspended = recorder.isSuspended }
     }
 
     // MARK: - Site de l'onglet actif
 
     /// Demande à Chrome son onglet actif, s'il est devant. La réponse arrive un peu plus tard :
-    /// elle est ignorée si la session a changé entre-temps.
+    /// le recorder l'ignore si la Session a changé entre-temps.
     private func readSite() {
-        guard let current, current.bundleID == ChromeTab.bundleID, !readingSite else { return }
+        guard let current = recorder.current, current.bundleID == ChromeTab.bundleID, !readingSite else { return }
         readingSite = true
         Task {
             let reading = await chromeTab.activeSite()
             readingSite = false
-            if case .site(let site) = reading { siteRead(site, sessionID: current.id) }
+            if case .site(let site) = reading {
+                recorder.siteRead(site, sessionID: current.id, at: Date())
+                publish()
+            }
         }
-    }
-
-    private func siteRead(_ site: String?, sessionID: Int64) {
-        guard var current, current.id == sessionID else { return }
-        if !current.siteRead {
-            // Première réponse depuis l'arrivée dans Chrome : la session en cours prend ce site.
-            db.updateSite(sessionID: current.id, site: site)
-            current.site = site
-            current.siteRead = true
-            self.current = current
-            currentAppName = site ?? current.appName
-        } else if site != current.site {
-            let now = Date()
-            closeCurrent(at: now)
-            start(bundleID: current.bundleID, appName: current.appName, site: site, siteRead: true, at: now)
-        }
-    }
-
-    private func closeCurrent(at date: Date) {
-        guard let current else { return }
-        db.updateEnd(sessionID: current.id, end: max(date, current.start))
-        self.current = nil
-        currentAppName = nil
     }
 }
 
