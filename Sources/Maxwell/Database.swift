@@ -204,6 +204,8 @@ final class Database {
         LEFT JOIN app_categories ac ON ac.bundle_id = s.bundle_id
         LEFT JOIN site_categories sc ON sc.site = s.site
         """
+    /// La Catégorie effective d'une Session (après `sessionCategory`), NULL si elle n'en a pas.
+    private static let effectiveCategory = "COALESCE(sc.category_id, ac.category_id)"
 
     /// Une ligne par Site, et une par App pour le temps passé hors des sites.
     private static let bySubject = "GROUP BY s.site, CASE WHEN s.site IS NULL THEN s.bundle_id END"
@@ -212,7 +214,7 @@ final class Database {
     private static let visibleSessions = """
         FROM sessions s
         \(sessionCategory)
-        LEFT JOIN categories c ON c.id = COALESCE(sc.category_id, ac.category_id)
+        LEFT JOIN categories c ON c.id = \(effectiveCategory)
         WHERE s.ended_at > ?1 AND s.started_at < ?2 AND COALESCE(c.hidden, 0) = 0
         """
 
@@ -291,7 +293,7 @@ final class Database {
         var result: [KnownApp] = []
         run("""
             SELECT MAX(s.bundle_id), s.site, COALESCE(s.site, MAX(s.app_name)),
-                   COALESCE(sc.category_id, ac.category_id, 0),
+                   COALESCE(\(Self.effectiveCategory), 0),
                    CASE WHEN s.site IS NULL THEN COALESCE(ac.manual, 0) ELSE COALESCE(sc.manual, 0) END,
                    SUM(s.ended_at - s.started_at) AS secs
             FROM sessions s
@@ -319,6 +321,9 @@ final class Database {
         }
     }
 
+    /// La Catégorie enregistrée pour cette App ou ce Site, `uncategorizedID` s'il n'y en a pas.
+    /// Pour un Site, c'est le choix de Max seulement : un Site qui suit son navigateur n'en a pas
+    /// (sa Catégorie effective est dans `knownApps()`).
     func categoryID(for subject: Subject) -> CategoryID {
         let (table, column, key) = categoryTable(subject)
         var id = uncategorizedID

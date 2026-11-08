@@ -42,11 +42,14 @@ Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [G
 | Fichier | Rôle |
 |---|---|
 | `AppModel.swift` | Objets de l'app et fenêtres (récap, catégories) |
-| `Tracker.swift` | Détection de l'app active, de l'inactivité et de la veille |
+| `Tracker.swift` | Branchement du suivi sur le Mac : app active, inactivité, veille, Chrome |
+| `SessionRecorder.swift` | Règles des Sessions : Inactivité, Pause, changement d'App ou de Site |
 | `ChromeTab.swift` | Site de l'onglet actif de Chrome, lu par Apple Events |
 | `Database.swift` | Stockage SQLite : sessions, catégories des apps et des sites |
 | `Recap.swift` | Le Récap d'une période : total, comparaison, Catégories classées, répartition |
-| `Categorizer.swift` | Classement automatique des apps par Apple Intelligence |
+| `RecapSource.swift` | Récaps tenus à jour pour les vues, à chaque tick et changement de Catégorie |
+| `Categorizer.swift` | Catégorisation : choix de Max, origine de chaque Catégorie, classement par Apple Intelligence |
+| `DefaultCategories.swift` | Catégories créées d'office : nom, pictogramme, teinte, précision pour le modèle |
 | `RecapNotifier.swift` | Notifications du Récap de la semaine et du mois |
 | `Updater.swift` | Mises à jour par Sparkle |
 | `MenuBarView.swift` | Récap du jour dans la barre de menus |
