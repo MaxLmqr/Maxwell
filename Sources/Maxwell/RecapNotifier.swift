@@ -58,19 +58,14 @@ final class RecapNotifier: NSObject, ObservableObject, UNUserNotificationCenterD
     }
 
     private func send(_ period: Period, for interval: DateInterval) {
-        let total = db.totalDuration(in: interval)
-        guard total >= 60 else { return }
-        let before = db.totalDuration(in: period.interval(containing: period.shift(interval.start, by: -1)))
-        let names = Dictionary(uniqueKeysWithValues: db.categories().map { ($0.id, $0.name) })
-        let top = db.durationByCategory(in: interval)
-            .sorted { $0.value > $1.value }
-            .prefix(3)
-            .map { "\(names[$0.key] ?? "À classer") \(formatDuration($0.value))" }
+        let recap = Recap(db: db, period: period, containing: interval.start)
+        guard recap.total >= Recap.activeDayThreshold else { return }
+        let top = recap.categories.prefix(3).map { "\($0.name) \(formatDuration($0.duration))" }
 
         let content = UNMutableNotificationContent()
         content.title = period == .week ? "Ta semaine" : "Ton mois"
         content.subtitle = period.title(for: interval)
-        content.body = "\(formatDuration(total)) actives (\(formatDelta(total, before))) · \(top.joined(separator: ", "))"
+        content.body = "\(formatDuration(recap.total)) actives (\(formatDelta(recap.change))) · \(top.joined(separator: ", "))"
         content.userInfo = ["period": period.rawValue, "date": interval.start.timeIntervalSince1970]
 
         let request = UNNotificationRequest(identifier: "recap-\(period.rawValue)", content: content, trigger: nil)

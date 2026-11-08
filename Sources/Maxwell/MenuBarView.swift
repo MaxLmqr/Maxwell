@@ -12,13 +12,7 @@ struct MenuBarView: View {
     var body: some View {
         let now = tracker.lastUpdate
         let _ = categorizer.revision
-        let db = tracker.db
-        let today = Period.day.interval(containing: now)
-        let ranking = CategoryRanking(durations: db.durationByCategory(in: today), categories: db.categories())
-        let yesterday = db.totalDuration(in: Period.day.previousInterval(before: today, now: now))
-        let usage = db.usageByApp(in: today)
-        let hours = Period.day.buckets(of: today).map { db.totalDuration(in: $0) }
-        let others = ranking.entries.dropFirst(CategoryRanking.colorCount)
+        let recap = Recap(db: tracker.db, period: .day, containing: now, now: now)
 
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -30,10 +24,10 @@ struct MenuBarView: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                BigNumber(formatDuration(ranking.total), size: 32)
-                if yesterday >= 60 {
+                BigNumber(formatDuration(recap.total), size: 32)
+                if recap.change != .notEnoughData {
                     HStack(spacing: 4) {
-                        DeltaLabel(change: Recap.Change(current: ranking.total, previous: yesterday))
+                        DeltaLabel(change: recap.change)
                         Text("vs hier")
                     }
                     .font(.system(size: 11))
@@ -42,24 +36,24 @@ struct MenuBarView: View {
             }
             .padding(.top, 2)
 
-            ShareBar(ranking: ranking)
+            ShareBar(recap: recap)
                 .padding(.top, 12)
 
-            if ranking.entries.isEmpty {
+            if recap.categories.isEmpty {
                 Text("Ton activité apparaîtra ici.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .padding(.top, 12)
             } else {
                 VStack(spacing: 4) {
-                    ForEach(ranking.colored) { entry in
-                        CategoryLine(entry: entry,
-                                     subjects: usage.filter { $0.categoryID == entry.id }.map(\.subject))
+                    ForEach(recap.principal) { entry in
+                        CategoryLine(entry: entry, subjects: entry.subjects.map(\.subject))
                     }
                 }
                 .padding(.top, 12)
-                if !others.isEmpty {
-                    Text("\(others.count) autre\(others.count > 1 ? "s" : "") · \(formatDuration(others.reduce(0) { $0 + $1.duration }))")
+                if !recap.others.isEmpty {
+                    let count = recap.others.count
+                    Text("\(count) autre\(count > 1 ? "s" : "") · \(formatDuration(recap.othersDuration))")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .padding(.leading, 32)
@@ -67,7 +61,7 @@ struct MenuBarView: View {
                 }
             }
 
-            DayRhythm(hours: hours, currentHour: Calendar.current.component(.hour, from: now))
+            DayRhythm(hours: recap.buckets.map(\.total), currentHour: Calendar.current.component(.hour, from: now))
                 .padding(.top, 18)
 
             Divider()
@@ -170,12 +164,12 @@ private struct StatusPill: View {
 
 /// Répartition de la journée entre les catégories principales ; les pastilles en dessous servent de légende.
 private struct ShareBar: View {
-    let ranking: CategoryRanking
+    let recap: Recap
 
     var body: some View {
-        let others = ranking.entries.dropFirst(CategoryRanking.colorCount).reduce(0) { $0 + $1.duration }
-        let segments = ranking.colored.map { ($0.duration, $0.fill) } + (others > 0 ? [(others, Theme.othersFill)] : [])
-        let total = ranking.total
+        let others = recap.othersDuration
+        let segments = recap.principal.map { ($0.duration, $0.fill) } + (others > 0 ? [(others, Theme.othersFill)] : [])
+        let total = recap.total
 
         GeometryReader { geo in
             let available = geo.size.width - 2 * Double(max(segments.count - 1, 0))
@@ -197,7 +191,7 @@ private struct ShareBar: View {
 }
 
 private struct CategoryLine: View {
-    let entry: CategoryRanking.Entry
+    let entry: Recap.Category
     let subjects: [Subject]
 
     var body: some View {
@@ -224,7 +218,7 @@ private struct DayRhythm: View {
         VStack(spacing: 5) {
             HStack(alignment: .bottom, spacing: 2) {
                 ForEach(hours.indices, id: \.self) { h in
-                    let active = hours[h] >= 60
+                    let active = hours[h] >= Recap.activeDayThreshold
                     RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(active ? (h == currentHour ? Theme.accent : Color.primary.opacity(0.22)) : Theme.emptyBar)
                         .frame(height: active ? max(height * min(hours[h] / 3600, 1), 3) : 3)

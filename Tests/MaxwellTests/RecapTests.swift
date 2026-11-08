@@ -95,6 +95,20 @@ final class RecapTests {
         #expect(recap.categories.first?.name == "À classer")
     }
 
+    @Test func anAddedCategoryHasTheSameHueAsInTheCategoryList() {
+        let reading = db.addCategory(name: "Lecture")!
+        db.setCategory(reading, for: .app("books"), manual: true)
+        session("books", from: date(11, 2, 9), minutes: 60)
+        session("xcode", in: "Développement", from: date(11, 2, 10), minutes: 30)
+
+        let recap = recap(.day, containing: date(11, 2), now: date(11, 3, 9))
+        let swatches = Theme.swatches(for: db.categories())
+
+        for category in recap.categories {
+            #expect(category.swatch.fill == swatches[category.id]?.fill)
+        }
+    }
+
     // MARK: - Comparaison
 
     @Test func aCurrentPeriodIsComparedToTheSameElapsedTime() {

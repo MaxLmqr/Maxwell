@@ -89,17 +89,26 @@ struct Recap {
         interval = period.interval(containing: date, calendar: calendar)
         previousTotal = db.totalDuration(in: period.previousInterval(before: interval, now: now, calendar: calendar))
 
-        let ranking = CategoryRanking(durations: db.durationByCategory(in: interval), categories: db.categories())
+        let known = db.categories()
+        let byID = Dictionary(uniqueKeysWithValues: known.map { ($0.id, $0) })
+        let swatches = Theme.swatches(for: known)
         let usage = db.usageByApp(in: interval)
-        total = ranking.total
-        categories = ranking.entries.map { entry in
-            let subjects = usage.filter { $0.categoryID == entry.id }
-            let small = subjects.filter(\.isSmallSite)
-            let folds = !small.isEmpty && small.count < subjects.count
-            return Category(id: entry.id, name: entry.name, symbol: entry.symbol, duration: entry.duration,
-                            rank: entry.rank, swatch: entry.swatch,
-                            subjects: subjects, foldedSites: folds ? small : [])
-        }
+        categories = db.durationByCategory(in: interval)
+            .filter { $0.value >= 1 }
+            .sorted { $0.value > $1.value }
+            .enumerated()
+            .map { rank, item in
+                let subjects = usage.filter { $0.categoryID == item.key }
+                let small = subjects.filter(\.isSmallSite)
+                let folds = !small.isEmpty && small.count < subjects.count
+                return Category(id: item.key,
+                                name: byID[item.key]?.name ?? "À classer",
+                                symbol: byID[item.key]?.symbol ?? Maxwell.Category.uncategorizedSymbol,
+                                duration: item.value, rank: rank,
+                                swatch: swatches[item.key, default: Theme.uncategorized],
+                                subjects: subjects, foldedSites: folds ? small : [])
+            }
+        total = categories.reduce(0) { $0 + $1.duration }
         appCount = Set(usage.map(\.bundleID)).count
 
         let principalIDs = Set(categories.prefix(Self.principalCount).map(\.id))

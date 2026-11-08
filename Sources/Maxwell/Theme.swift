@@ -74,48 +74,6 @@ enum Theme {
     }
 }
 
-/// Les catégories d'une période, de la plus utilisée à la moins utilisée.
-/// Les quatre premières prennent leur teinte attitrée, les autres restent en gris.
-struct CategoryRanking {
-    struct Entry: Identifiable {
-        let id: CategoryID
-        let name: String
-        let symbol: String
-        let duration: TimeInterval
-        let rank: Int
-        /// La teinte de la catégorie, même quand elle n'est pas parmi les quatre premières.
-        let swatch: Theme.Swatch
-        var isColored: Bool { rank < CategoryRanking.colorCount }
-        var fill: Color { isColored ? swatch.fill : Theme.othersFill }
-        var glyph: Color { isColored ? swatch.glyph : .secondary }
-    }
-
-    static let colorCount = 4
-
-    let entries: [Entry]
-    var total: TimeInterval { entries.reduce(0) { $0 + $1.duration } }
-    var colored: ArraySlice<Entry> { entries.prefix(Self.colorCount) }
-
-    init(durations: [CategoryID: TimeInterval], categories: [Category]) {
-        let byID = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0) })
-        let swatches = Theme.swatches(for: categories)
-        entries = durations
-            .filter { $0.value >= 1 }
-            .sorted { $0.value > $1.value }
-            .enumerated()
-            .map { rank, item in
-                let category = byID[item.key]
-                return Entry(id: item.key,
-                             name: category?.name ?? "À classer",
-                             symbol: category?.symbol ?? Category.uncategorizedSymbol,
-                             duration: item.value, rank: rank,
-                             swatch: swatches[item.key, default: Theme.uncategorized])
-            }
-    }
-
-    func entry(_ id: CategoryID) -> Entry? { entries.first { $0.id == id } }
-}
-
 // MARK: - Composants
 
 /// Petit libellé gris au-dessus d'un chiffre.

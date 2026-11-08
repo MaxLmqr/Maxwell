@@ -22,15 +22,6 @@ struct ThemeTests {
         let swatches = Theme.swatches(for: ids.map(category))
         #expect(swatches[11]?.fill == Theme.palette[3].fill)
     }
-
-    @Test func rankingUsesTheSameHueAsTheCategoryList() {
-        let categories = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11].map(category)
-        let ranking = CategoryRanking(durations: [11: 3_600, 1: 60], categories: categories)
-        let swatches = Theme.swatches(for: categories)
-        for entry in ranking.entries {
-            #expect(entry.swatch.fill == swatches[entry.id]?.fill)
-        }
-    }
 }
 
 @Suite("Ordre des catégories par défaut")

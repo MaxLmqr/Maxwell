@@ -89,10 +89,11 @@ enum Period: String, CaseIterable, Identifiable {
 }
 
 /// Évolution en pourcentage, ou « — » si la période de référence est quasi vide.
-func formatDelta(_ current: TimeInterval, _ previous: TimeInterval) -> String {
-    guard previous >= 60 else { return "—" }
-    let change = Int(((current - previous) / previous * 100).rounded())
-    return change >= 0 ? "+ \(change) %" : "− \(-change) %"
+func formatDelta(_ change: Recap.Change) -> String {
+    switch change {
+    case .notEnoughData: "—"
+    case .percent(let change): change >= 0 ? "+ \(change) %" : "− \(-change) %"
+    }
 }
 
 /// Part d'un total, arrondie ; une part non nulle n'est jamais affichée « 0 % ».
