@@ -24,12 +24,14 @@ enum Theme {
         swatch(light: 0xD9487E, dark: 0xE66694),                      // rose : Design
         swatch(light: 0xE2AE1F, dark: 0xE7B93A, glyph: 0x4A3500),    // ambre : Écriture et documents
         swatch(light: 0x1695B0, dark: 0x2DAEC6),                      // turquoise : Navigation
-        swatch(light: 0xD9453B, dark: 0xE65F55),                      // rouge : Divertissement
+        // Rouge plus sombre que le vert : les deux restent distincts pour un œil qui les confond.
+        swatch(light: 0xB8352B, dark: 0xC9483E),                      // rouge : Divertissement
         swatch(light: 0x86A62E, dark: 0x9AB944, glyph: 0x263300),    // olive : Outils
         swatch(light: 0x6B7A8F, dark: 0x8593A6),                      // ardoise : Système
     ]
     /// « À classer » n'a pas de teinte à elle.
-    static let uncategorized = swatch(light: 0xA3A8AF, dark: 0x6E747C)
+    /// Gris assez soutenu pour que le pictogramme blanc reste lisible en mode clair.
+    static let uncategorized = swatch(light: 0x80868F, dark: 0x6E747C)
 
     /// La teinte attitrée de chaque catégorie, qui ne dépend que de la liste des catégories :
     /// celles créées d'office gardent la leur, chaque catégorie ajoutée ensuite prend la teinte

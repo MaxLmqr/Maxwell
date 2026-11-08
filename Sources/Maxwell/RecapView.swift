@@ -442,7 +442,10 @@ private struct RecapChart: View {
             var parts: [(key: String, value: Double, fill: Color)]
             if let hovered, let entry = ranking.entry(hovered) {
                 let value = bucket.byCategory[hovered] ?? 0
-                parts = [("h", value, entry.swatch.fill), ("rest", bucket.total - value, Theme.emptyBar)]
+                // Hors des quatre premières, la ligne est grise : le survol aussi, pour ne pas
+                // emprunter la teinte d'une catégorie colorée.
+                let highlight = entry.isColored ? entry.swatch.fill : Color.primary.opacity(0.4)
+                parts = [("h", value, highlight), ("rest", bucket.total - value, Theme.emptyBar)]
             } else {
                 let values = topCategories.map { bucket.byCategory[$0.id] ?? 0 }
                 parts = zip(topCategories, values).map { ("\($0.id)", $1, $0.fill) }

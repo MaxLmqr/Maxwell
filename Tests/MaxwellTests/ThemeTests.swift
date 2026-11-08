@@ -1,10 +1,11 @@
+import Foundation
 import Testing
 @testable import Maxwell
 
 @Suite("Teintes des catégories")
 struct ThemeTests {
-    private func category(_ id: CategoryID) -> Category {
-        Category(id: id, name: "C\(id)", symbol: Category.defaultSymbol, hidden: false, isSystem: false)
+    private func category(_ id: CategoryID) -> Maxwell.Category {
+        Maxwell.Category(id: id, name: "C\(id)", symbol: Maxwell.Category.defaultSymbol, hidden: false, isSystem: false)
     }
 
     @Test func defaultCategoriesKeepTheirHue() {
@@ -29,5 +30,27 @@ struct ThemeTests {
         for entry in ranking.entries {
             #expect(entry.swatch.fill == swatches[entry.id]?.fill)
         }
+    }
+}
+
+@Suite("Ordre des catégories par défaut")
+final class DefaultCategoryOrderTests {
+    private let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("DefaultCategoryOrderTests-\(UUID().uuidString).sqlite")
+
+    deinit {
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: url.path + suffix))
+        }
+    }
+
+    /// `Theme.palette` attribue ses teintes par identifiant : changer l'ordre de création
+    /// des catégories par défaut décalerait toutes les couleurs des nouvelles installations.
+    @Test func seedingOrderMatchesThePalette() throws {
+        let db = try Database(url: url)
+        let names = db.categories().sorted { $0.id < $1.id }.map(\.name)
+        #expect(names == ["Développement", "IA", "Communication", "Réunions", "Design",
+                          "Écriture et documents", "Navigation", "Divertissement", "Outils", "Système"])
+        #expect(names.count == Theme.palette.count)
     }
 }
