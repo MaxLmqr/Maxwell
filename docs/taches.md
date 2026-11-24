@@ -133,11 +133,13 @@ Un Projet peut avoir un **Dossier**, souvent un dépôt de code : clic droit sur
 
 `c` sur la Tâche choisie ouvre une confirmation : le Dossier, ce que Claude a le droit de faire, le modèle, et une précision facultative. Tab passe d'un modèle à l'autre (opus par défaut, puis fable, sonnet, haiku, ou le réglage de Claude Code) ; Maxwell retient le dernier choisi. ↩ lance, Échap renonce.
 
-Maxwell démarre alors lui-même une session Claude Code en arrière-plan (`claude -p`), dans le Dossier, avec comme demande la Tâche telle qu'elle est écrite : Titre, Projet, Échéance, Note, Checklist, précision. Pendant le travail, la ligne de la Tâche montre « ◆ » et l'étape en cours (« Edit Recap.swift », « Bash swift test »). À la fin, « ◆ compte rendu » : la Tâche dépliée affiche ce que Claude a fait, ce qui reste et ce qu'il faut vérifier. Claude ne coche pas la Tâche : c'est à Max, après relecture.
+Maxwell démarre alors lui-même une session Claude Code d'arrière-plan (`claude --bg`), dans le Dossier, avec comme demande la Tâche telle qu'elle est écrite : Titre, Projet, Échéance, Note, Checklist, précision. Pendant le travail, la ligne de la Tâche montre « ◆ » et l'étape en cours (« Edit Recap.swift », « Bash swift test »). À la fin, « ◆ compte rendu » : la Tâche dépliée affiche ce que Claude a fait, ce qui reste et ce qu'il faut vérifier. Claude ne coche pas la Tâche : c'est à Max, après relecture.
 
-Dans la Tâche dépliée : « arrêter » pendant le travail ; ensuite « reprendre dans le terminal », qui rouvre la même session dans Ghostty s'il est installé, sinon dans Terminal, pour continuer à la main (`claude --resume`, la commande est aussi copiée ; la session porte le titre de la Tâche), « ouvrir dans Claude Desktop », qui ajoute la session à la liste de Claude Desktop pour la poursuivre là-bas (`claude --desktop --resume`, seulement si Claude Desktop est installé), et « relancer ». Une session n'existe qu'à un endroit à la fois : ces deux reprises ne sont proposées qu'une fois le travail fini.
+La session apparaît aussi dans `claude agents`, sous le titre de la Tâche et rangée sous son Dossier : Max peut l'y suivre en direct, lui répondre ou valider une action. Maxwell lit son état dans `claude agents --json` toutes les 3 secondes et le compte rendu dans la conversation que Claude Code enregistre. Si Max poursuit la conversation dans `claude agents`, la Tâche repasse en cours, puis reprend le nouveau compte rendu. `claude --bg` refuse un dossier que Claude Code ne connaît pas encore : il faut y lancer `claude` une fois et accepter de lui faire confiance ; la Tâche le dit.
 
-**Ce que Claude peut faire seul** se règle dans ⚙︎ → « Claude peut… », car en arrière-plan personne ne valide ses actions :
+Dans la Tâche dépliée : « arrêter » pendant le travail ; ensuite « reprendre dans le terminal », qui ouvre la session dans Ghostty s'il est installé, sinon dans Terminal (`claude attach`, la commande est aussi copiée), « ouvrir dans Claude Desktop », qui arrête la session dans `claude agents` puis l'ajoute à la liste de Claude Desktop pour la poursuivre là-bas (`claude --desktop --resume`, seulement si Claude Desktop est installé), et « relancer ».
+
+**Ce que Claude peut faire seul** se règle dans ⚙︎ → « Claude peut… », car Max ne regarde pas forcément la session pendant qu'elle travaille :
 
 | Réglage | Effet |
 |---|---|
@@ -145,7 +147,7 @@ Dans la Tâche dépliée : « arrêter » pendant le travail ; ensuite « repren
 | modifier des fichiers, sans commande | Il ne peut ni lancer les tests ni utiliser git. |
 | proposer un plan, sans rien changer | Lecture seule. |
 
-Une session en cours quand Maxwell se ferme est marquée « interrompue ».
+Une session continue quand Maxwell se ferme ; il la retrouve au lancement suivant.
 
 ### Claude lit et modifie les Tâches et le Récap
 

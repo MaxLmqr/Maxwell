@@ -64,7 +64,7 @@ final class AppModel {
         quickEntry = QuickEntryController(store: tasks)
         guard live else { return }
         quickEntry.start()
-        claude.markInterruptedRuns()
+        claude.follow()
         // Claude peut changer les Tâches par le serveur MCP : la fenêtre suit, à deux secondes près.
         outsideChanges = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [tasks] _ in
             MainActor.assumeIsolated { _ = tasks.reloadIfChangedElsewhere() }

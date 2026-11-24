@@ -53,33 +53,45 @@ enum ClaudeModel: String, CaseIterable, Identifiable {
     }
 }
 
-/// Lance Claude Code sur une Tâche, en arrière-plan, dans le dossier de son Projet, et suit son avancement.
-/// Rien ne passe par Claude Desktop : Maxwell démarre lui-même `claude -p` et lit ce qu'il renvoie.
+/// Lance Claude Code sur une Tâche, dans le dossier de son Projet, en session d'arrière-plan (`claude --bg`) :
+/// Max la retrouve dans `claude agents`, où il peut la suivre et lui répondre. Maxwell suit son état
+/// avec `claude agents --json` et lit le compte rendu dans la conversation que Claude Code enregistre.
+/// La session survit à la fermeture de Maxwell, qui la retrouve au prochain lancement.
 @MainActor
 final class ClaudeRunner: ObservableObject {
     /// Ce que Claude est en train de faire, par Tâche : « Edit Recap.swift », « Bash swift test »…
     @Published private(set) var activity: [TaskID: String] = [:]
 
     private let store: TaskStore
-    private var processes: [TaskID: Process] = [:]
-    private var buffers: [TaskID: Data] = [:]
-    private var errors: [TaskID: String] = [:]
+    /// Les Tâches dont la session démarre : `claude --bg` n'a pas encore rendu son identifiant.
+    private var launching: Set<TaskID> = []
+    /// Les Tâches que Max a demandé d'arrêter.
+    private var stopping: Set<TaskID> = []
+    private var timer: Timer?
+    private var polling = false
+    private var ticks = 0
 
     init(store: TaskStore) {
         self.store = store
     }
 
-    /// Au lancement de l'app : une Tâche restée « en cours » n'a plus de session derrière elle.
-    func markInterruptedRuns() {
-        for task in store.tasks where task.claude?.state == .running {
+    /// Au lancement de l'app : marque les lancements interrompus, puis suit les sessions toutes les 3 secondes.
+    func follow() {
+        for task in store.tasks where task.claude?.state == .running && task.claude?.session.isEmpty == true {
             var trace = task.claude!
             trace.state = .failed
-            trace.result = "Interrompue : Maxwell a été fermé pendant que Claude travaillait."
+            trace.result = "Interrompue : Maxwell a été fermé pendant que la session démarrait."
             store.setClaude(trace, for: task.id)
         }
+        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.poll() }
+        }
+        poll()
     }
 
-    func isRunning(_ id: TaskID) -> Bool { processes[id] != nil }
+    func isRunning(_ id: TaskID) -> Bool {
+        launching.contains(id) || store.task(id)?.claude?.state == .running
+    }
 
     // MARK: - Lancer
 
@@ -107,8 +119,8 @@ final class ClaudeRunner: ObservableObject {
         if !extra.isEmpty { lines.append("\nPrécision de Max :\n\(extra)") }
         lines.append("""
 
-            Fais ce travail. Personne ne peut te répondre pendant que tu travailles : si une décision \
-            revient à Max, ne tranche pas à sa place, arrête-toi et dis laquelle.
+            Fais ce travail. Max peut suivre cette session dans `claude agents`, mais il ne la regarde pas \
+            forcément : si une décision lui revient, ne tranche pas à sa place, arrête-toi et dis laquelle.
             Termine par un compte rendu court, en français : ce qui est fait, ce qui reste, et ce que Max \
             doit vérifier. Ne coche pas la tâche : Max le fera après avoir relu.
             """)
@@ -117,106 +129,279 @@ final class ClaudeRunner: ObservableObject {
 
     /// Lance Claude sur la Tâche. `extra` est une précision tapée par Max au moment de lancer.
     func start(_ id: TaskID, extra: String = "", autonomy: ClaudeAutonomy = .current, model: ClaudeModel = .current) {
-        guard let task = store.task(id), processes[id] == nil else { return }
-        let session = UUID().uuidString.lowercased()
+        guard let task = store.task(id), !isRunning(id) else { return }
         guard let claude = Self.claudePath() else {
-            store.setClaude(ClaudeTrace(startedAt: Date(), session: session, state: .failed,
+            store.setClaude(ClaudeTrace(startedAt: Date(), session: "", state: .failed,
                                         result: "Claude Code est introuvable sur ce Mac (commande `claude`)."), for: id)
             return
         }
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: claude)
-        process.currentDirectoryURL = folder(for: task)
-        var arguments = ["-p", Self.prompt(for: task, project: store.project(task.projectID), extra: extra),
-                         "--output-format", "stream-json", "--verbose",
-                         "--session-id", session,
+        var arguments = ["--bg", Self.prompt(for: task, project: store.project(task.projectID), extra: extra),
                          "--permission-mode", autonomy.rawValue]
         // Claude retrouve les Tâches et le Récap de Maxwell pendant qu'il travaille.
         if let maxwell = Bundle.main.executablePath, URL(fileURLWithPath: maxwell).lastPathComponent == "Maxwell" {
             let config = ["mcpServers": ["maxwell": ["command": maxwell, "args": ["--mcp"]]]]
             arguments += ["--mcp-config", MCPServer.encode(config)]
         }
-        process.arguments = Self.arguments(arguments, model: model, name: task.title)
-        process.environment = Self.environment()
+        arguments = Self.arguments(arguments, model: model, name: task.title)
+        let folder = folder(for: task)
 
-        let output = Pipe(), errorOutput = Pipe()
-        process.standardOutput = output
-        process.standardError = errorOutput
-        process.standardInput = FileHandle.nullDevice
-        output.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            Task { @MainActor [weak self] in self?.receive(data, for: id) }
-        }
-        errorOutput.fileHandleForReading.readabilityHandler = { handle in
-            let text = String(decoding: handle.availableData, as: UTF8.self)
-            guard !text.isEmpty else { return }
-            Task { @MainActor [weak self] in self?.errors[id, default: ""] += text }
-        }
-        process.terminationHandler = { finished in
-            let status = finished.terminationStatus
-            Task { @MainActor [weak self] in self?.finished(id, status: status) }
-        }
-
-        do {
-            try process.run()
-        } catch {
-            store.setClaude(ClaudeTrace(startedAt: Date(), session: session, state: .failed,
-                                        result: "Impossible de lancer Claude : \(error.localizedDescription)"), for: id)
-            return
-        }
-        processes[id] = process
-        buffers[id] = Data()
-        errors[id] = ""
+        launching.insert(id)
         activity[id] = "démarre…"
-        store.setClaude(ClaudeTrace(startedAt: Date(), session: session, state: .running, result: nil), for: id)
+        store.setClaude(ClaudeTrace(startedAt: Date(), session: "", state: .running, result: nil), for: id)
+        Task.detached {
+            let launch = ClaudeRunner.run(claude, arguments, in: folder)
+            var session: String?
+            if let short = ClaudeRunner.backgroundID(in: launch.output) {
+                // La liste de `claude agents` donne l'identifiant complet de la session.
+                for _ in 0..<10 where session == nil {
+                    session = ClaudeRunner.agents()?.keys.first { $0.hasPrefix(short) }
+                    if session == nil { try? await Task.sleep(for: .milliseconds(500)) }
+                }
+            }
+            let found = session
+            await MainActor.run { [weak self] in self?.launched(id, session: found, output: launch.output) }
+        }
     }
 
-    /// Les arguments complétés du modèle choisi, et du nom sous lequel la session apparaît dans `claude --resume`.
+    private func launched(_ id: TaskID, session: String?, output: String) {
+        launching.remove(id)
+        guard var trace = store.task(id)?.claude else { return }
+        if let session {
+            trace.session = session
+            store.setClaude(trace, for: id)
+        } else {
+            activity[id] = nil
+            trace.state = .failed
+            trace.result = Self.launchFailure(output)
+            store.setClaude(trace, for: id)
+        }
+    }
+
+    /// Pourquoi `claude --bg` n'a pas lancé de session, dit à Max.
+    static func launchFailure(_ output: String) -> String {
+        let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if detail.contains("Workspace not trusted") {
+            return "Claude Code ne connaît pas encore ce dossier. Lance `claude` une fois dans ce dossier, " +
+                "accepte de lui faire confiance, puis relance la tâche.\n\n\(detail)"
+        }
+        return detail.isEmpty ? "Claude n'a pas démarré." : String(detail.suffix(600))
+    }
+
+    /// L'identifiant court que `claude --bg` affiche : « backgrounded · c6d4072b · Le titre ».
+    nonisolated static func backgroundID(in output: String) -> String? {
+        for line in output.split(separator: "\n") where line.contains("backgrounded") {
+            let parts = line.components(separatedBy: " · ")
+            if parts.count >= 2 {
+                let id = parts[1].trimmingCharacters(in: .whitespaces)
+                if !id.isEmpty, id.allSatisfy({ $0.isHexDigit }) { return id }
+            }
+        }
+        return nil
+    }
+
+    /// Les arguments complétés du modèle choisi, et du nom sous lequel la session apparaît dans `claude agents`.
     static func arguments(_ base: [String], model: ClaudeModel, name: String) -> [String] {
         base + (model.alias.map { ["--model", $0] } ?? []) + ["--name", String(name.prefix(60))]
     }
 
+    /// Arrête la session ; sa conversation reste, et « relancer » ou le terminal peuvent repartir de là.
     func stop(_ id: TaskID) {
-        guard let process = processes[id] else { return }
-        errors[id] = "Arrêtée par Max."
-        process.terminate()
+        guard let session = store.task(id)?.claude?.session, !session.isEmpty,
+              let claude = Self.claudePath() else { return }
+        stopping.insert(id)
+        activity[id] = "s'arrête…"
+        Task.detached {
+            _ = ClaudeRunner.run(claude, ["stop", ClaudeRunner.shortID(session)], in: nil)
+            await MainActor.run { [weak self] in self?.poll(force: true) }
+        }
     }
+
+    /// L'identifiant court d'une session, celui que prennent `claude attach` et `claude stop`.
+    nonisolated static func shortID(_ session: String) -> String { String(session.prefix(8)) }
 
     // MARK: - Suivre
 
-    private func receive(_ data: Data, for id: TaskID) {
-        buffers[id, default: Data()].append(data)
-        // Une ligne par message ; la dernière peut être incomplète.
-        while let newline = buffers[id]?.firstIndex(of: 0x0A) {
-            let line = buffers[id]!.prefix(upTo: newline)
-            buffers[id]!.removeSubrange(...newline)
-            guard let message = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
-            handle(message, for: id)
+    /// L'état d'une session dans `claude agents` : `busy` pendant que Claude travaille, `idle` quand il attend.
+    struct Agent: Equatable {
+        var status: String?
+        var state: String?
+    }
+
+    /// Ce que dit la fin de la conversation enregistrée.
+    struct Transcript: Equatable {
+        /// Le dernier texte de Claude depuis la dernière demande.
+        var lastText: String?
+        /// La dernière étape, en quelques mots.
+        var lastStep: String?
+        /// Claude a répondu à la dernière demande et n'attend le résultat d'aucun outil.
+        var answered = false
+    }
+
+    func poll(force: Bool = false) {
+        guard !polling else { return }
+        ticks += 1
+        let traced = store.tasks.filter { $0.claude.map { !$0.session.isEmpty } ?? false }
+        let running = traced.filter { $0.claude?.state == .running }
+        // Max peut reprendre une session finie dans `claude agents` : on revoit les récentes de temps en temps.
+        let recent = traced.filter { $0.claude!.startedAt > Date().addingTimeInterval(-3 * 86400) }
+        guard force || !running.isEmpty || (ticks % 7 == 0 && !recent.isEmpty) else { return }
+        let watched = Array(Set(running + recent))
+        guard !watched.isEmpty, let claude = Self.claudePath() else { return }
+        let sessions = watched.map { ($0.id, $0.claude!.session) }
+
+        polling = true
+        Task.detached {
+            let agents = ClaudeRunner.agents(claude: claude)
+            var transcripts: [String: Transcript] = [:]
+            for (_, session) in sessions {
+                if let data = ClaudeRunner.transcriptURL(session: session).flatMap(ClaudeRunner.tail) {
+                    transcripts[session] = ClaudeRunner.summarize(data)
+                }
+            }
+            let summaries = transcripts
+            await MainActor.run { [weak self] in
+                self?.polling = false
+                guard let agents else { return }
+                self?.update(sessions.map(\.0), agents: agents, transcripts: summaries)
+            }
         }
     }
 
-    private func handle(_ message: [String: Any], for id: TaskID) {
-        switch message["type"] as? String {
-        case "assistant":
-            let content = (message["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
-            for block in content {
-                if let step = Self.describe(block) { activity[id] = step }
-            }
-        case "result":
-            guard var trace = store.task(id)?.claude else { return }
-            let failed = message["is_error"] as? Bool ?? false
-            trace.state = failed ? .failed : .done
-            trace.result = (message["result"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            store.setClaude(trace, for: id)
-        default:
-            break
+    private func update(_ ids: [TaskID], agents: [String: Agent], transcripts: [String: Transcript]) {
+        for id in ids where !launching.contains(id) {
+            guard let trace = store.task(id)?.claude, !trace.session.isEmpty else { continue }
+            let (next, step) = Self.reconcile(trace, agent: agents[trace.session],
+                                              transcript: transcripts[trace.session], stopping: stopping.contains(id))
+            activity[id] = step
+            if next != trace { store.setClaude(next, for: id) }
+            if next.state != .running { stopping.remove(id) }
         }
+    }
+
+    /// La trace mise à jour d'après la session, et l'étape à afficher pendant qu'elle travaille.
+    static func reconcile(_ trace: ClaudeTrace, agent: Agent?, transcript: Transcript?,
+                          stopping: Bool) -> (ClaudeTrace, String?) {
+        var next = trace
+        let step = transcript?.lastStep ?? "démarre…"
+        func done() {
+            next.state = .done
+            next.result = transcript?.lastText
+        }
+        switch agent?.status {
+        case "busy":
+            next.state = .running
+            return (next, stopping ? "s'arrête…" : step)
+        case "idle":
+            if transcript?.answered == true {
+                done()
+                return (next, nil)
+            }
+            // Pas encore de réponse : la session démarre, ou attend Max.
+            guard trace.state == .running else { return (next, nil) }
+            if let state = agent?.state?.lowercased(), ["input", "wait", "permission", "block"].contains(where: state.contains) {
+                return (next, "attend ta réponse dans claude agents")
+            }
+            return (next, step)
+        case let status?:
+            next.state = .running
+            return (next, "\(status) · attend peut-être ta réponse dans claude agents")
+        case nil:
+            // La session ne tourne plus.
+            guard trace.state == .running else { return (next, nil) }
+            if stopping {
+                next.state = .failed
+                next.result = ["Arrêtée par Max.", transcript?.lastText].compactMap { $0 }.joined(separator: "\n\n")
+            } else if transcript?.answered == true {
+                done()
+            } else {
+                next.state = .failed
+                next.result = transcript?.lastText ?? "La session s'est arrêtée sans compte rendu."
+            }
+            return (next, nil)
+        }
+    }
+
+    /// Les sessions que liste `claude agents`, par identifiant complet ; nil si la commande échoue.
+    nonisolated static func agents(claude: String? = nil) -> [String: Agent]? {
+        guard let claude = claude ?? claudePath() else { return nil }
+        let result = run(claude, ["agents", "--json", "--all"], in: nil, mergeErrors: false)
+        guard result.status == 0 else { return nil }
+        return parseAgents(Data(result.output.utf8))
+    }
+
+    nonisolated static func parseAgents(_ data: Data) -> [String: Agent]? {
+        guard let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
+        var agents: [String: Agent] = [:]
+        for entry in list {
+            guard let session = entry["sessionId"] as? String else { continue }
+            agents[session] = Agent(status: entry["status"] as? String, state: entry["state"] as? String)
+        }
+        return agents
+    }
+
+    /// La conversation enregistrée par Claude Code, rangée sous `~/.claude/projects/<dossier>/`.
+    nonisolated static func transcriptURL(session: String) -> URL? {
+        let projects = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/projects")
+        let folders = (try? FileManager.default.contentsOfDirectory(at: projects, includingPropertiesForKeys: nil)) ?? []
+        return folders.lazy.map { $0.appendingPathComponent("\(session).jsonl") }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// La fin du fichier : la conversation peut peser plusieurs mégaoctets.
+    nonisolated static func tail(_ url: URL) -> Data? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let start = size > 400_000 ? size - 400_000 : 0
+        try? handle.seek(toOffset: start)
+        var data = handle.readDataToEndOfFile()
+        // La première ligne est sans doute coupée.
+        if start > 0, let newline = data.firstIndex(of: 0x0A) { data = Data(data[data.index(after: newline)...]) }
+        return data
+    }
+
+    /// Lit la conversation : le dernier texte de Claude, sa dernière étape, et s'il a fini de répondre.
+    nonisolated static func summarize(_ data: Data) -> Transcript {
+        var transcript = Transcript()
+        for line in data.split(separator: 0x0A) {
+            guard let entry = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                  entry["isSidechain"] as? Bool != true,
+                  let message = entry["message"] as? [String: Any] else { continue }
+            switch entry["type"] as? String {
+            case "user":
+                // Une nouvelle demande, pas le résultat d'un outil : la réponse est à venir.
+                let content = message["content"]
+                let isRequest = content is String
+                    || (content as? [[String: Any]])?.contains { $0["type"] as? String == "text" } == true
+                if isRequest {
+                    transcript = Transcript()
+                }
+            case "assistant":
+                let blocks = message["content"] as? [[String: Any]] ?? []
+                var usesTool = false
+                for block in blocks {
+                    if let step = describe(block) { transcript.lastStep = step }
+                    switch block["type"] as? String {
+                    case "text":
+                        let text = (block["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !text.isEmpty { transcript.lastText = text }
+                    case "tool_use":
+                        usesTool = true
+                    default:
+                        break
+                    }
+                }
+                if usesTool { transcript.answered = false }
+                else if blocks.contains(where: { $0["type"] as? String == "text" }) { transcript.answered = transcript.lastText != nil }
+            default:
+                break
+            }
+        }
+        return transcript
     }
 
     /// Une étape du travail de Claude en quelques mots, ou nil si le bloc n'en dit rien.
-    static func describe(_ block: [String: Any]) -> String? {
+    nonisolated static func describe(_ block: [String: Any]) -> String? {
         switch block["type"] as? String {
         case "text":
             let text = (block["text"] as? String ?? "").split(separator: "\n").first.map(String.init) ?? ""
@@ -232,26 +417,37 @@ final class ClaudeRunner: ObservableObject {
         }
     }
 
-    private func finished(_ id: TaskID, status: Int32) {
-        processes[id] = nil
-        buffers[id] = nil
-        activity[id] = nil
-        let error = errors.removeValue(forKey: id) ?? ""
-        // Sans message « result », la session s'est arrêtée avant de conclure.
-        guard var trace = store.task(id)?.claude, trace.state == .running else { return }
-        trace.state = .failed
-        let detail = error.trimmingCharacters(in: .whitespacesAndNewlines)
-        trace.result = detail.isEmpty ? "Claude s'est arrêté sans compte rendu (code \(status))." : String(detail.suffix(600))
-        store.setClaude(trace, for: id)
+    /// Lance une commande et attend sa fin. La sortie passe par un fichier : une session `--bg` qui
+    /// garderait la sortie ouverte bloquerait la lecture d'un tuyau.
+    nonisolated static func run(_ executable: String, _ arguments: [String], in folder: URL?,
+                                mergeErrors: Bool = true) -> (status: Int32, output: String) {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("maxwell-claude-\(UUID().uuidString).txt")
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard let output = try? FileHandle(forWritingTo: file) else { return (-1, "") }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        if let folder { process.currentDirectoryURL = folder }
+        process.environment = environment()
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = mergeErrors ? output : FileHandle.nullDevice
+        do { try process.run() } catch { return (-1, error.localizedDescription) }
+        process.waitUntilExit()
+        try? output.close()
+        let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        return (process.terminationStatus, text)
     }
 
     // MARK: - Reprendre
 
-    /// La commande qui rouvre la session dans un terminal, pour continuer avec Claude à la main.
+    /// La commande qui ouvre la session dans un terminal : `claude attach` pour une session d'arrière-plan,
+    /// sinon `claude --resume` (les sessions lancées par d'anciennes versions de Maxwell).
     func resumeCommand(for task: TaskItem) -> String? {
-        guard let session = task.claude?.session else { return nil }
+        guard let session = task.claude?.session, !session.isEmpty else { return nil }
         let folder = folder(for: task).path.replacingOccurrences(of: "'", with: "'\\''")
-        return "cd '\(folder)' && claude --resume \(session)"
+        return "cd '\(folder)' && { claude attach \(Self.shortID(session)) || claude --resume \(session); }"
     }
 
     /// Ghostty, s'il est installé : c'est le terminal de Max.
@@ -266,8 +462,8 @@ final class ClaudeRunner: ObservableObject {
         ["-na", app.path, "--args", "-e", shell, "-lic", command]
     }
 
-    /// Rouvre la session dans le terminal, pour continuer avec Claude à la main : Ghostty s'il est là,
-    /// sinon Terminal. La commande est aussi copiée, pour la coller ailleurs.
+    /// Ouvre la session dans le terminal : Ghostty s'il est là, sinon Terminal.
+    /// La commande est aussi copiée, pour la coller ailleurs.
     func resume(_ task: TaskItem) {
         guard let command = resumeCommand(for: task) else { return }
         NSPasteboard.general.clearContents()
@@ -297,43 +493,35 @@ final class ClaudeRunner: ObservableObject {
 
     /// Ce qu'il faut lancer pour confier la session à Claude Desktop, où elle rejoint la liste des sessions.
     /// `claude --desktop` refuse de tourner sans terminal : `script` lui en prête un.
-    static func desktopArguments(claude: String, session: String) -> [String] {
+    nonisolated static func desktopArguments(claude: String, session: String) -> [String] {
         ["-q", "/dev/null", claude, "--desktop", "--resume", session]
     }
 
-    /// Ouvre la session dans Claude Desktop, une fois que Claude a fini : une session ne tourne qu'à un endroit.
-    /// La commande part du dossier de la Tâche, où Claude Code range la session.
+    /// Ouvre la session dans Claude Desktop, une fois que Claude a fini. Une session ne tourne qu'à un endroit :
+    /// Maxwell l'arrête d'abord dans `claude agents`, où elle attend sinon la suite.
     func openInDesktop(_ task: TaskItem) {
-        guard let session = task.claude?.session, task.claude?.state != .running,
+        guard let session = task.claude?.session, !session.isEmpty, task.claude?.state != .running,
               let claude = Self.claudePath() else { return }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
-        process.arguments = Self.desktopArguments(claude: claude, session: session)
-        process.currentDirectoryURL = folder(for: task)
-        process.environment = Self.environment()
-        process.standardInput = FileHandle.nullDevice
-        // Dans le terminal prêté, les erreurs arrivent sur la sortie standard.
-        let errors = Pipe()
-        process.standardOutput = errors
-        process.standardError = errors
-        process.terminationHandler = { finished in
-            guard finished.terminationStatus != 0 else { return }
-            let detail = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            Task { @MainActor in
+        let folder = folder(for: task)
+        Task.detached {
+            _ = ClaudeRunner.run(claude, ["stop", ClaudeRunner.shortID(session)], in: nil)
+            let result = ClaudeRunner.run("/usr/bin/script",
+                                          ClaudeRunner.desktopArguments(claude: claude, session: session), in: folder)
+            guard result.status != 0 else { return }
+            let detail = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            await MainActor.run {
                 let alert = NSAlert()
                 alert.messageText = "Claude Desktop n'a pas pu ouvrir la session"
-                alert.informativeText = detail.isEmpty ? "Code \(finished.terminationStatus)." : String(detail.suffix(400))
+                alert.informativeText = detail.isEmpty ? "Code \(result.status)." : String(detail.suffix(400))
                 alert.runModal()
             }
         }
-        try? process.run()
     }
 
     /// L'environnement des processus que Maxwell lance : le PATH du terminal de Max, sans les variables
     /// d'une session Claude Code dont Maxwell aurait hérité (s'il a été lancé depuis l'une d'elles).
     /// Sinon Claude se croirait une session enfant et n'enregistrerait pas la conversation.
-    static func environment(from inherited: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
+    nonisolated static func environment(from inherited: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
         var environment = inherited.filter { key, _ in
             !key.hasPrefix("CLAUDE") && !key.hasPrefix("AI_AGENT") && key != "BAGGAGE"
         }
@@ -343,14 +531,14 @@ final class ClaudeRunner: ObservableObject {
 
     // MARK: - Trouver Claude
 
-    static func claudePath() -> String? {
+    nonisolated static func claudePath() -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return ["\(home)/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
             .first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     /// Le PATH du terminal de Max : une app lancée depuis le Finder n'a pas git, swift ou npm dans le sien.
-    static let shellPath: String = {
+    nonisolated static let shellPath: String = {
         let fallback = "\(FileManager.default.homeDirectoryForCurrentUser.path)/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh")

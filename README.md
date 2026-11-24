@@ -65,7 +65,7 @@ Le vocabulaire (session, temps actif, catégorie, récap…) est défini dans [G
 | `Tasks/TaskStore.swift` | Les Tâches telles que les vues les montrent et les changent |
 | `Tasks/TaskKeyboard.swift` | Touches du module Tâches, et ce que montre le module (liste, Tâche choisie, dépliée) |
 | `Tasks/TaskLinks.swift` | Liens d'une Tâche : repérés, raccourcis, cliquables |
-| `Tasks/ClaudeRunner.swift` | Confier une Tâche à Claude : session Claude Code en arrière-plan, suivi, reprise |
+| `Tasks/ClaudeRunner.swift` | Confier une Tâche à Claude : session Claude Code d'arrière-plan, suivi par `claude agents`, reprise |
 | `MCP/MCPServer.swift`, `MCP/MCPTools.swift` | `Maxwell --mcp` : serveur MCP, outils sur les Tâches et le Récap |
 | `Tasks/QuickEntry.swift` | Lecture d'une ligne tapée : dates en français, `#projet`, `!` |
 | `Tasks/QuickEntryPanel.swift` | Saisie rapide : raccourci global et champ flottant |
@@ -117,7 +117,7 @@ La spécification complète est dans [docs/taches.md](docs/taches.md).
 Détail dans [docs/taches.md](docs/taches.md#pont-avec-claude).
 
 - **Dossier d'un projet** : clic droit sur un projet → « Choisir le dossier… ». C'est le dépôt où Claude travaille sur ses tâches. `p` range la tâche choisie dans un projet.
-- **Confier une tâche** : `c` sur la tâche choisie, puis ↩. Maxwell lance lui-même une session Claude Code en arrière-plan dans le dossier du projet ; la ligne montre l'étape en cours, puis la tâche dépliée affiche le compte rendu. Tab y change de modèle. « reprendre dans le terminal » rouvre la session dans Ghostty s'il est installé, sinon dans Terminal ; « ouvrir dans Claude Desktop » l'ajoute à la liste des sessions de Claude Desktop.
+- **Confier une tâche** : `c` sur la tâche choisie, puis ↩. Maxwell lance lui-même une session Claude Code d'arrière-plan (`claude --bg`) dans le dossier du projet : elle apparaît dans `claude agents`, où on peut la suivre et lui répondre. La ligne montre l'étape en cours, puis la tâche dépliée affiche le compte rendu. Tab y change de modèle. « reprendre dans le terminal » ouvre la session dans Ghostty s'il est installé, sinon dans Terminal ; « ouvrir dans Claude Desktop » l'ajoute à la liste des sessions de Claude Desktop.
 - **Ce que Claude peut faire seul** : ⚙︎ → « Claude peut… » (autonomie par défaut, fichiers seulement, ou plan seul).
 - **Serveur MCP** : `Maxwell --mcp` donne à Claude les tâches et le récap de temps. Pour toutes tes sessions Claude Code :
 

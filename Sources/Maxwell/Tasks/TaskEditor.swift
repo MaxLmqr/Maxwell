@@ -83,7 +83,7 @@ struct TaskEditor: View {
                     Button("reprendre dans le terminal") {
                         if let current = store.task(task.id) { claude.resume(current) }
                     }
-                    .help("Rouvre la session dans \(ClaudeRunner.ghostty == nil ? "Terminal" : "Ghostty") ; la commande est aussi copiée")
+                    .help("Ouvre la session dans \(ClaudeRunner.ghostty == nil ? "Terminal" : "Ghostty") ; elle est aussi dans claude agents, et la commande est copiée")
                     if ClaudeRunner.desktop != nil {
                         Button("ouvrir dans Claude Desktop") {
                             if let current = store.task(task.id) { claude.openInDesktop(current) }

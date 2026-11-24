@@ -136,7 +136,7 @@ final class ClaudeBridgeTests {
         let task = store.add(TaskItem.Draft(title: "Corriger le bip", projectID: project.id))
         store.setClaude(ClaudeTrace(startedAt: Date(), session: "abc-123", state: .done, result: nil), for: task.id)
         let command = ClaudeRunner(store: store).resumeCommand(for: store.task(task.id)!)
-        #expect(command == "cd '\(folder)' && claude --resume abc-123")
+        #expect(command == "cd '\(folder)' && { claude attach abc-123 || claude --resume abc-123; }")
         // Dans Ghostty : le shell de Max, en mode connexion, exécute cette commande.
         #expect(ClaudeRunner.ghosttyArguments(app: URL(fileURLWithPath: "/Applications/Ghostty.app"),
                                               command: command!, shell: "/bin/zsh")
@@ -158,6 +158,88 @@ final class ClaudeBridgeTests {
     @Test func claudeDesktopResumesTheSameSession() {
         #expect(ClaudeRunner.desktopArguments(claude: "/bin/claude", session: "abc-123")
             == ["-q", "/dev/null", "/bin/claude", "--desktop", "--resume", "abc-123"])
+    }
+
+    // MARK: - Sessions d'arrière-plan
+
+    @Test func readsTheIdThatClaudeBgPrints() {
+        let output = """
+            backgrounded · c6d4072b · Corriger le bip
+              claude agents             list sessions
+            """
+        #expect(ClaudeRunner.backgroundID(in: output) == "c6d4072b")
+        #expect(ClaudeRunner.backgroundID(in: "Workspace not trusted.") == nil)
+        #expect(ClaudeRunner.launchFailure("Workspace not trusted. Run `claude` in /x once").hasPrefix("Claude Code ne connaît pas"))
+        #expect(ClaudeRunner.shortID("c6d4072b-8efc-4191-bdc6-72f506799180") == "c6d4072b")
+    }
+
+    @Test func readsTheSessionsOfClaudeAgents() throws {
+        let json = """
+            [{"pid":1,"cwd":"/x","kind":"interactive","sessionId":"aaa","status":"busy"},
+             {"id":"c6d4072b","kind":"background","sessionId":"c6d4072b-8efc","status":"idle","state":"done"},
+             {"id":"0fe872f3","kind":"background","sessionId":"0fe872f3-7527","state":"stopped"}]
+            """
+        let agents = try #require(ClaudeRunner.parseAgents(Data(json.utf8)))
+        #expect(agents["c6d4072b-8efc"] == ClaudeRunner.Agent(status: "idle", state: "done"))
+        #expect(agents["0fe872f3-7527"] == ClaudeRunner.Agent(status: nil, state: "stopped"))
+        #expect(agents.count == 3)
+    }
+
+    private func line(_ object: [String: Any]) -> String {
+        MCPServer.encode(object)
+    }
+
+    @Test func readsTheConversationClaudeCodeSaves() {
+        let request = line(["type": "user", "message": ["role": "user", "content": "Corrige le bip"]])
+        let tool = line(["type": "assistant", "message": ["content": [
+            ["type": "text", "text": "Je regarde."],
+            ["type": "tool_use", "name": "Edit", "input": ["file_path": "/x/Recap.swift"]]]]])
+        let toolResult = line(["type": "user", "message": ["content": [["type": "tool_result", "content": "ok"]]]])
+        let answer = line(["type": "assistant", "message": ["content": [["type": "text", "text": "C'est corrigé."]]]])
+        let sidechain = line(["type": "assistant", "isSidechain": true, "message": ["content": [["type": "text", "text": "sous-agent"]]]])
+
+        let working = ClaudeRunner.summarize(Data([request, tool, toolResult].joined(separator: "\n").utf8))
+        #expect(working == ClaudeRunner.Transcript(lastText: "Je regarde.", lastStep: "Edit Recap.swift", answered: false))
+
+        let finished = ClaudeRunner.summarize(Data([request, tool, toolResult, answer, sidechain].joined(separator: "\n").utf8))
+        #expect(finished.answered)
+        #expect(finished.lastText == "C'est corrigé.")
+
+        // Max relance la conversation : la réponse précédente ne compte plus.
+        let again = ClaudeRunner.summarize(Data([request, answer, request].joined(separator: "\n").utf8))
+        #expect(again == ClaudeRunner.Transcript())
+    }
+
+    @Test func followsTheSessionState() {
+        let running = ClaudeTrace(startedAt: Date(), session: "s", state: .running, result: nil)
+        let working = ClaudeRunner.Transcript(lastText: "Je regarde.", lastStep: "Edit Recap.swift", answered: false)
+        let answered = ClaudeRunner.Transcript(lastText: "C'est corrigé.", lastStep: "C'est corrigé.", answered: true)
+        let busy = ClaudeRunner.Agent(status: "busy", state: "working")
+        let idle = ClaudeRunner.Agent(status: "idle", state: "working")
+
+        // Claude travaille : on montre l'étape.
+        var (trace, step) = ClaudeRunner.reconcile(running, agent: busy, transcript: working, stopping: false)
+        #expect(trace.state == .running && step == "Edit Recap.swift")
+        // Il a répondu et attend : c'est fait, avec son compte rendu.
+        (trace, step) = ClaudeRunner.reconcile(running, agent: idle, transcript: answered, stopping: false)
+        #expect(trace.state == .done && trace.result == "C'est corrigé." && step == nil)
+        // Au démarrage, la session est inactive avant d'avoir lu la demande : toujours en cours.
+        (trace, step) = ClaudeRunner.reconcile(running, agent: idle, transcript: nil, stopping: false)
+        #expect(trace.state == .running && step == "démarre…")
+        // Max reprend une session finie dans claude agents : elle repasse en cours.
+        let done = ClaudeTrace(startedAt: Date(), session: "s", state: .done, result: "C'est corrigé.")
+        (trace, _) = ClaudeRunner.reconcile(done, agent: busy, transcript: working, stopping: false)
+        #expect(trace.state == .running)
+        // Arrêtée par Max.
+        (trace, _) = ClaudeRunner.reconcile(running, agent: ClaudeRunner.Agent(status: nil, state: "stopped"),
+                                            transcript: working, stopping: true)
+        #expect(trace.state == .failed && trace.result?.hasPrefix("Arrêtée par Max.") == true)
+        // Disparue sans réponse.
+        (trace, _) = ClaudeRunner.reconcile(running, agent: nil, transcript: nil, stopping: false)
+        #expect(trace.state == .failed)
+        // Une session finie qui ne tourne plus ne change pas.
+        (trace, step) = ClaudeRunner.reconcile(done, agent: nil, transcript: answered, stopping: false)
+        #expect(trace == done && step == nil)
     }
 
     // MARK: - Serveur MCP
@@ -214,34 +296,39 @@ final class ClaudeBridgeTests {
     }
 }
 
-/// Lance une vraie session Claude Code, sur un dossier et une base temporaires, en mode « plan ».
-/// Coûte une requête : ne tourne que si `MAXWELL_CLAUDE_E2E=1`.
+/// Lance une vraie session Claude Code en arrière-plan, en mode « plan » et avec haiku, sur une base temporaire.
+/// Elle travaille dans ce dépôt, que Claude Code connaît déjà (`claude --bg` refuse un dossier inconnu),
+/// puis est retirée de `claude agents`. Coûte une requête : ne tourne que si `MAXWELL_CLAUDE_E2E=1`.
 @MainActor
 @Suite("Session Claude réelle", .enabled(if: ProcessInfo.processInfo.environment["MAXWELL_CLAUDE_E2E"] == "1"))
 struct ClaudeRunnerEndToEndTests {
     @Test(.timeLimit(.minutes(3))) func claudeWorksInTheProjectFolderAndReportsBack() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("maxwell-e2e-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        try "Le mot de passe du jour est : tournesol.".write(to: root.appendingPathComponent("note.txt"), atomically: true, encoding: .utf8)
+        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let database = FileManager.default.temporaryDirectory.appendingPathComponent("maxwell-e2e-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: database) }
 
-        let store = TaskStore(db: try Database(url: root.appendingPathComponent("test.sqlite")))
+        let store = TaskStore(db: try Database(url: database))
         let project = store.projectNamed("Essai")
-        store.setProjectFolder(project.id, to: root.path)
-        let task = store.add(TaskItem.Draft(title: "Lis note.txt et donne le mot de passe du jour", projectID: project.id))
+        store.setProjectFolder(project.id, to: repository.path)
+        let task = store.add(TaskItem.Draft(title: "Lis Package.swift et donne seulement le nom du package", projectID: project.id))
 
         let runner = ClaudeRunner(store: store)
         runner.start(task.id, autonomy: .plan, model: .haiku)
         #expect(store.task(task.id)?.claude?.state == .running)
         while store.task(task.id)?.claude?.state == .running {
-            try await Task.sleep(for: .milliseconds(300))
+            try await Task.sleep(for: .seconds(2))
+            runner.poll(force: true)
         }
         let trace = try #require(store.task(task.id)?.claude)
-        #expect(trace.state == .done)
-        #expect(trace.result?.lowercased().contains("tournesol") == true)
-        // Le processus se ferme un instant après avoir rendu son compte rendu.
-        for _ in 0..<50 where runner.isRunning(task.id) { try await Task.sleep(for: .milliseconds(200)) }
-        #expect(!runner.isRunning(task.id))
+        defer {
+            if let claude = ClaudeRunner.claudePath() {
+                _ = ClaudeRunner.run(claude, ["stop", ClaudeRunner.shortID(trace.session)], in: nil)
+                _ = ClaudeRunner.run(claude, ["rm", ClaudeRunner.shortID(trace.session)], in: nil)
+            }
+        }
+        #expect(trace.state == .done, "\(trace.result ?? "")")
+        #expect(trace.result?.contains("Maxwell") == true)
         #expect(runner.activity[task.id] == nil)
     }
 }
