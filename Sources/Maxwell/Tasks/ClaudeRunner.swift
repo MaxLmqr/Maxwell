@@ -138,9 +138,7 @@ final class ClaudeRunner: ObservableObject {
             arguments += ["--mcp-config", MCPServer.encode(config)]
         }
         process.arguments = Self.arguments(arguments, model: model, name: task.title)
-        var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = Self.shellPath
-        process.environment = environment
+        process.environment = Self.environment()
 
         let output = Pipe(), errorOutput = Pipe()
         process.standardOutput = output
@@ -278,6 +276,7 @@ final class ClaudeRunner: ObservableObject {
         if let ghostty = Self.ghostty {
             let open = Process()
             open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            open.environment = Self.environment()
             open.arguments = Self.ghosttyArguments(
                 app: ghostty, command: command,
                 shell: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh")
@@ -311,9 +310,7 @@ final class ClaudeRunner: ObservableObject {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
         process.arguments = Self.desktopArguments(claude: claude, session: session)
         process.currentDirectoryURL = folder(for: task)
-        var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = Self.shellPath
-        process.environment = environment
+        process.environment = Self.environment()
         process.standardInput = FileHandle.nullDevice
         // Dans le terminal prêté, les erreurs arrivent sur la sortie standard.
         let errors = Pipe()
@@ -331,6 +328,17 @@ final class ClaudeRunner: ObservableObject {
             }
         }
         try? process.run()
+    }
+
+    /// L'environnement des processus que Maxwell lance : le PATH du terminal de Max, sans les variables
+    /// d'une session Claude Code dont Maxwell aurait hérité (s'il a été lancé depuis l'une d'elles).
+    /// Sinon Claude se croirait une session enfant et n'enregistrerait pas la conversation.
+    static func environment(from inherited: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
+        var environment = inherited.filter { key, _ in
+            !key.hasPrefix("CLAUDE") && !key.hasPrefix("AI_AGENT") && key != "BAGGAGE"
+        }
+        environment["PATH"] = shellPath
+        return environment
     }
 
     // MARK: - Trouver Claude

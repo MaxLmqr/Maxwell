@@ -143,6 +143,18 @@ final class ClaudeBridgeTests {
             == ["-na", "/Applications/Ghostty.app", "--args", "-e", "/bin/zsh", "-lic", command!])
     }
 
+    @Test func launchedProcessesDropAnInheritedClaudeSession() {
+        let environment = ClaudeRunner.environment(from: [
+            "HOME": "/Users/max", "CLAUDECODE": "1", "CLAUDE_CODE_CHILD_SESSION": "1",
+            "AI_AGENT": "claude-code", "PATH": "/usr/bin",
+        ])
+        #expect(environment["HOME"] == "/Users/max")
+        #expect(environment["CLAUDECODE"] == nil)
+        #expect(environment["CLAUDE_CODE_CHILD_SESSION"] == nil)
+        #expect(environment["AI_AGENT"] == nil)
+        #expect(environment["PATH"] == ClaudeRunner.shellPath)
+    }
+
     @Test func claudeDesktopResumesTheSameSession() {
         #expect(ClaudeRunner.desktopArguments(claude: "/bin/claude", session: "abc-123")
             == ["-q", "/dev/null", "/bin/claude", "--desktop", "--resume", "abc-123"])
