@@ -8,14 +8,21 @@ struct MenuBarView: View {
     @EnvironmentObject private var shelf: ShelfController
     @Environment(\.dismiss) private var dismiss
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @AppStorage(ClaudeAutonomy.key) private var autonomy = ClaudeAutonomy.auto
 
     var body: some View {
         let now = source.now
         let recap = source.recap(.day, containing: now)
 
         VStack(alignment: .leading, spacing: 0) {
+            MenuBarTasks()
+
+            Divider()
+                .padding(.top, 12)
+                .padding(.bottom, 12)
+
             HStack {
-                Text("Aujourd'hui")
+                Text("Temps d'aujourd'hui")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -96,7 +103,7 @@ struct MenuBarView: View {
         HStack(spacing: 4) {
             Button { Windows.showRecap() } label: {
                 HStack {
-                    Text("Ouvrir le récap")
+                    Text("Récap")
                     Spacer()
                     Text("⌘R").foregroundStyle(.tertiary)
                 }
@@ -104,13 +111,30 @@ struct MenuBarView: View {
             .buttonStyle(MenuRowButtonStyle())
             .keyboardShortcut("r")
 
+            Button { Windows.showTasks() } label: {
+                HStack {
+                    Text("Tâches")
+                    Spacer()
+                    Text(QuickEntryController.windowShortcut).foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(MenuRowButtonStyle())
+            .keyboardShortcut("t")
+
             Menu {
                 Button("Ouvrir l'Étagère") {
                     shelf.openFromMenu()
                     dismiss()
                 }
+                Button("Saisie rapide (\(QuickEntryController.shortcut))") {
+                    dismiss()
+                    AppModel.shared.quickEntry.open()
+                }
                 Button("Catégories…") { Windows.showCategories() }
                 Divider()
+                Picker("Claude peut…", selection: $autonomy) {
+                    ForEach(ClaudeAutonomy.allCases) { Text($0.label).tag($0) }
+                }
                 Toggle("Secouer pour ouvrir l'Étagère", isOn: $shelf.opensOnShake)
                 Toggle("Notifications de récap", isOn: $notifier.enabled)
                 Toggle("Lancer au démarrage", isOn: $launchAtLogin)

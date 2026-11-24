@@ -23,65 +23,114 @@ struct RecapView: View {
         let interval = recap.interval
         let isCurrent = interval.contains(Date())
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(period.title(for: interval))
-                        .font(.system(size: 22, weight: .semibold))
-                    if let subtitle = subtitle(period: period, interval: interval, isCurrent: isCurrent) {
-                        Text(subtitle)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            header(period: period, interval: interval, isCurrent: isCurrent)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 14)
+                .overlay(alignment: .bottom) { Rectangle().fill(Console.line).frame(height: 1) }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) {
+                    HStack(alignment: .top, spacing: 40) {
+                        metric("temps actif") {
+                            Text(formatDuration(recap.total))
+                                .font(.system(size: 34, weight: .light))
+                                .monospacedDigit()
+                        }
+                        if period == .day {
+                            metric("apps") { Text("\(recap.appCount)") }
+                        } else {
+                            metric("par jour actif") { Text(formatDuration(recap.activeDayAverage)) }
+                        }
+                        metric(period.comparisonLabel) { DeltaLabel(change: recap.change) }
+                        Spacer(minLength: 0)
                     }
+
+                    RecapChart(period: period, recap: recap, hovered: hovered,
+                               average: period == .day ? nil : recap.activeDayAverage, selected: $selectedBucket)
+                        .frame(height: 200)
+
+                    categories(recap: recap)
                 }
-
-                HStack(alignment: .top, spacing: 44) {
-                    metric("Temps actif") { BigNumber(formatDuration(recap.total), size: 36) }
-                    if period == .day {
-                        metric("Apps utilisées") { Text("\(recap.appCount)") }
-                    } else {
-                        metric("Par jour actif") { Text(formatDuration(recap.activeDayAverage)) }
-                    }
-                    metric(period.comparisonLabel) { DeltaLabel(change: recap.change) }
-                    Spacer(minLength: 0)
-                }
-
-                RecapChart(period: period, recap: recap, hovered: hovered,
-                           average: period == .day ? nil : recap.activeDayAverage, selected: $selectedBucket)
-                    .frame(height: 210)
-
-                categories(recap: recap)
+                .padding(.horizontal, 22)
+                .padding(.top, 20)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 18)
-            .padding(.bottom, 28)
+
+            hintBar
         }
-        .frame(minWidth: 560, minHeight: 620)
-        .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                Button { navigation.referenceDate = period.shift(navigation.referenceDate, by: -1) } label: {
-                    Label("Précédent", systemImage: "chevron.left")
+    }
+
+    /// Le titre de la période, puis Jour / Semaine / Mois et les flèches pour remonter le temps.
+    private func header(period: Period, interval: DateInterval, isCurrent: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(period.title(for: interval).uppercased())
+                .font(Console.mono(12, weight: .semibold))
+                .tracking(1.5)
+            if let subtitle = subtitle(period: period, interval: interval, isCurrent: isCurrent) {
+                Text(subtitle.lowercased()).font(Console.mono(11)).foregroundStyle(Console.muted)
+            }
+            Spacer()
+            HStack(spacing: 2) {
+                ForEach(Period.allCases) { p in
+                    Button { navigation.period = p } label: {
+                        HStack(spacing: 5) {
+                            Text(p.rawValue)
+                            Text(p.key).foregroundStyle(Console.muted)
+                        }
+                        .font(Console.mono(11))
+                        .foregroundStyle(p == period ? Console.text : Console.secondary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(p == period ? Console.field : .clear))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .help("Période précédente")
-                Button { navigation.referenceDate = period.shift(navigation.referenceDate, by: 1) } label: {
-                    Label("Suivant", systemImage: "chevron.right")
+            }
+            HStack(spacing: 2) {
+                stepButton("chevron.left", help: "Période précédente (←)") {
+                    navigation.referenceDate = period.shift(navigation.referenceDate, by: -1)
                 }
-                .help("Période suivante")
+                stepButton("chevron.right", help: "Période suivante (→)") {
+                    navigation.referenceDate = period.shift(navigation.referenceDate, by: 1)
+                }
                 .disabled(isCurrent)
-            }
-            ToolbarItem(placement: .principal) {
-                Picker("Période", selection: $navigation.period) {
-                    ForEach(Period.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("Aujourd'hui") { navigation.referenceDate = Date() }
-                    .disabled(isCurrent)
+                .opacity(isCurrent ? 0.35 : 1)
             }
         }
+    }
+
+    private func stepButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Console.secondary)
+                .frame(width: 24, height: 22)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Console.field))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    private var hintBar: some View {
+        HStack(spacing: 14) {
+            ForEach([("j s m", "période"), ("← →", "avant, après"), ("t", "aujourd'hui"),
+                     ("clic", "détail"), ("clic droit", "catégorie")], id: \.0) { key, label in
+                HStack(spacing: 5) {
+                    Text(key).foregroundStyle(Console.secondary)
+                    Text(label)
+                }
+            }
+            Spacer()
+        }
+        .font(Console.mono(10.5))
+        .foregroundStyle(Console.muted)
+        .padding(.horizontal, 22)
+        .frame(height: 30)
+        .background(Console.bar.opacity(0.6))
+        .overlay(alignment: .top) { Rectangle().fill(Console.line).frame(height: 1) }
     }
 
     private func subtitle(period: Period, interval: DateInterval, isCurrent: Bool) -> String? {
@@ -97,10 +146,13 @@ struct RecapView: View {
     }
 
     private func metric<Value: View>(_ label: String, @ViewBuilder value: () -> Value) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Caption(label)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label.uppercased())
+                .font(Console.mono(10, weight: .medium))
+                .tracking(1)
+                .foregroundStyle(Console.muted)
             value()
-                .font(.system(size: 20))
+                .font(Console.mono(18))
                 .monospacedDigit()
         }
     }
@@ -109,19 +161,19 @@ struct RecapView: View {
     private func categories(recap: Recap) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Catégories").font(.system(size: 13, weight: .semibold))
+                Text("CATÉGORIES").font(Console.mono(10, weight: .medium)).tracking(1).foregroundStyle(Console.muted)
                 Spacer()
-                Button("Gérer…") { Windows.showCategories() }
+                Button("gérer ›") { Windows.showCategories() }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Theme.accent)
-                    .font(.system(size: 12))
+                    .foregroundStyle(Console.accent)
+                    .font(Console.mono(11))
             }
             .padding(.horizontal, 10)
 
             if recap.categories.isEmpty {
                 Text("Aucune activité sur cette période.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
+                    .font(Console.mono(12))
+                    .foregroundStyle(Console.muted)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
             } else {
@@ -176,7 +228,8 @@ private struct CategoryRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CategoryBadge(symbol: entry.symbol, fill: entry.fill, glyph: entry.glyph, size: 28)
+            CategoryBadge(symbol: entry.symbol, fill: entry.isPrincipal ? entry.fill : Console.chartOthers,
+                          glyph: entry.isPrincipal ? entry.glyph : Console.text, size: 24)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Text(entry.name)
@@ -185,19 +238,19 @@ private struct CategoryRow: View {
                     AppIconStack(subjects: subjects, size: 15)
                     Spacer(minLength: 8)
                     Text(formatDuration(entry.duration))
-                        .font(.system(size: 13))
+                        .font(Console.mono(12))
                     Text(formatShare(total > 0 ? entry.duration / total : 0))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 34, alignment: .trailing)
+                        .font(Console.mono(11))
+                        .foregroundStyle(Console.muted)
+                        .frame(width: 38, alignment: .trailing)
                 }
                 .monospacedDigit()
                 GeometryReader { geo in
                     Capsule()
-                        .fill(entry.isPrincipal ? entry.swatch.fill : Color.primary.opacity(0.16))
+                        .fill(entry.isPrincipal ? entry.swatch.fill : Console.chartOthers)
                         .frame(width: max(geo.size.width * entry.duration / longest, 3))
                 }
-                .frame(height: 4)
+                .frame(height: 3)
             }
             Image(systemName: "chevron.right")
                 .font(.system(size: 10, weight: .semibold))
@@ -208,7 +261,7 @@ private struct CategoryRow: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.primary.opacity(isHovered ? 0.05 : 0)))
+                .fill(isHovered ? Console.hover : .clear))
         .contentShape(Rectangle())
     }
 }
@@ -223,8 +276,8 @@ private struct SmallSitesToggle: View {
         HStack {
             Button(action: action) {
                 HStack(spacing: 6) {
-                    Text(showsAll ? "Afficher moins" : "Tout afficher")
-                        .foregroundStyle(Theme.accent)
+                    Text(showsAll ? "afficher moins" : "tout afficher")
+                        .foregroundStyle(Console.accent)
                     if !showsAll {
                         Text("\(count) site\(count > 1 ? "s" : "") de moins de \(formatDuration(Recap.smallSiteDuration))")
                             .foregroundStyle(.tertiary)
@@ -234,7 +287,7 @@ private struct SmallSitesToggle: View {
             .buttonStyle(.plain)
             Spacer()
         }
-        .font(.system(size: 12))
+        .font(Console.mono(11))
         // Aligné sur les noms, après l'icône de 16 pt.
         .padding(.leading, 26)
         .padding(.vertical, 4)
@@ -284,14 +337,14 @@ private struct RecapChart: View {
             if let average, average >= 60, hovered == nil {
                 RuleMark(y: .value("Moyenne", average / unit.divisor))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                    .foregroundStyle(Color.secondary.opacity(0.8))
+                    .foregroundStyle(Console.secondary)
                     .annotation(position: .top, alignment: .trailing, spacing: 3) {
                         Text("moyenne \(formatDuration(average))")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(Color(nsColor: .windowBackgroundColor).opacity(0.9), in: Capsule())
+                            .background(Console.background.opacity(0.9), in: Capsule())
                     }
             }
 
@@ -313,12 +366,13 @@ private struct RecapChart: View {
         .chartYAxis {
             AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(Color.primary.opacity(0.08))
+                    .foregroundStyle(Console.line)
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
-                        Text("\(Int(v)) \(unit.label)")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                        // Une demi-heure s'écrit « 0,5 h », pas « 0 h » comme le zéro de l'axe.
+                        Text("\(v.rounded() == v ? "\(Int(v))" : v.formatted(.number.precision(.fractionLength(1)).locale(Locale(identifier: "fr_FR")))) \(unit.label)")
+                            .font(Console.mono(10))
+                            .foregroundStyle(Console.muted)
                     }
                 }
             }
@@ -380,8 +434,8 @@ private struct RecapChart: View {
 
     private func axisText(_ text: String, emphasized: Bool) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: emphasized ? .semibold : .regular))
-            .foregroundStyle(emphasized ? Color.primary : Color(nsColor: .tertiaryLabelColor))
+            .font(Console.mono(10, weight: emphasized ? .semibold : .regular))
+            .foregroundStyle(emphasized ? Console.accent : Console.secondary)
     }
 
     private func tooltip(for bucket: Recap.Bucket) -> some View {
@@ -401,8 +455,8 @@ private struct RecapChart: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        .background(Console.field, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Console.line))
     }
 
     /// Empile les quatre catégories principales puis « les autres », avec un léger jour entre chaque part.
@@ -415,11 +469,11 @@ private struct RecapChart: View {
                 let value = bucket.byCategory[hovered] ?? 0
                 // Hors des quatre premières, la ligne est grise : le survol aussi, pour ne pas
                 // emprunter la teinte d'une catégorie colorée.
-                let highlight = entry.isPrincipal ? entry.swatch.fill : Color.primary.opacity(0.4)
-                parts = [("h", value, highlight), ("rest", bucket.total - value, Theme.emptyBar)]
+                let highlight = entry.isPrincipal ? entry.swatch.fill : Console.text.opacity(0.75)
+                parts = [("h", value, highlight), ("rest", bucket.total - value, Console.chartRest)]
             } else {
                 parts = principal.map { ("\($0.id)", bucket.byCategory[$0.id] ?? 0, $0.fill) }
-                parts.append(("others", bucket.others, Theme.othersFill))
+                parts.append(("others", bucket.others, Console.chartOthers))
             }
 
             var y = 0.0

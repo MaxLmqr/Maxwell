@@ -104,6 +104,8 @@ final class Database {
         guard sqlite3_open(url.path, &db) == SQLITE_OK else { throw DatabaseError.sqlite(errorMessage) }
         try exec("PRAGMA journal_mode=WAL")
         try exec("PRAGMA foreign_keys=ON")
+        // Claude peut écrire dans la base en même temps que l'app (serveur MCP) : on patiente au lieu d'échouer.
+        try exec("PRAGMA busy_timeout=3000")
         try exec("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,9 +140,10 @@ final class Database {
         seedCategoriesIfNeeded()
         addSymbols()
         addSites()
+        try createTaskTables()
     }
 
-    private func columns(of table: String) -> Set<String> {
+    func columns(of table: String) -> Set<String> {
         var columns: Set<String> = []
         run("PRAGMA table_info(\(table))", []) { columns.insert(String(cString: sqlite3_column_text($0, 1))) }
         return columns
@@ -373,15 +376,25 @@ final class Database {
 
     private var errorMessage: String { String(cString: sqlite3_errmsg(db)) }
 
-    private static func optionalText(_ stmt: OpaquePointer, _ index: Int32) -> String? {
+    /// Change quand une autre connexion (le serveur MCP, par exemple) a écrit dans la base.
+    func dataVersion() -> Int64 {
+        var version: Int64 = 0
+        run("PRAGMA data_version", []) { version = sqlite3_column_int64($0, 0) }
+        return version
+    }
+
+    /// L'identifiant de la dernière ligne insérée.
+    var lastInsertID: Int64 { sqlite3_last_insert_rowid(db) }
+
+    static func optionalText(_ stmt: OpaquePointer, _ index: Int32) -> String? {
         sqlite3_column_type(stmt, index) == SQLITE_NULL ? nil : String(cString: sqlite3_column_text(stmt, index))
     }
 
-    private func exec(_ sql: String) throws {
+    func exec(_ sql: String) throws {
         guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else { throw DatabaseError.sqlite(errorMessage) }
     }
 
-    private func run(_ sql: String, _ params: [Any], row: ((OpaquePointer) -> Void)? = nil) {
+    func run(_ sql: String, _ params: [Any], row: ((OpaquePointer) -> Void)? = nil) {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
             NSLog("Maxwell SQL error: \(errorMessage)")

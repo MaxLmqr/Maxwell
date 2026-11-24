@@ -7,6 +7,15 @@ enum Period: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// La touche qui choisit la période dans le Récap.
+    var key: String {
+        switch self {
+        case .day: "j"
+        case .week: "s"
+        case .month: "m"
+        }
+    }
+
     private var component: Calendar.Component {
         switch self {
         case .day: .day

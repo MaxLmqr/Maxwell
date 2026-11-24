@@ -194,6 +194,46 @@ enum DemoData {
         }
         return pool[pool.count - 1]
     }
+
+    /// Quelques Tâches et Projets plausibles, datés par rapport à aujourd'hui.
+    @MainActor
+    static func fillTasks(_ store: TaskStore) {
+        let today = store.today
+        let day = { (offset: Int) in When.day(today.adding(offset, .day, calendar: store.calendar)) }
+        let maxwell = store.projectNamed("Maxwell")
+        let ventes = store.projectNamed("Ventes")
+        store.projectNamed("Maison")
+        let drafts: [TaskItem.Draft] = [
+            .init(title: "Relancer Carrefour sur la campagne de décembre", projectID: ventes.id, when: day(0),
+                  deadline: today.adding(2, .day, calendar: store.calendar), flagged: true),
+            .init(title: "Relire la spec des tâches", projectID: maxwell.id, when: day(-2)),
+            .init(title: "Préparer le point d'équipe", when: day(0),
+                  repetition: Repetition(mode: .fixed, every: 1, unit: .week)),
+            .init(title: "Répondre au devis de l'imprimeur", note: "Le PDF est dans le fil https://exemple.slack.com/archives/C0ACHATS/p1732", when: day(0)),
+            .init(title: "Relire https://github.com/exemple/maxwell/pull/12", projectID: maxwell.id, when: day(0)),
+            .init(title: "Publier la version 0.5", projectID: maxwell.id, when: day(1)),
+            .init(title: "Envoyer le reporting mensuel", projectID: ventes.id, when: day(4),
+                  deadline: today.adding(6, .day, calendar: store.calendar)),
+            .init(title: "Prendre rendez-vous chez le dentiste", when: day(9)),
+            .init(title: "Apprendre les raccourcis de Xcode", when: .someday),
+            .init(title: "Idée : export CSV du récap"),
+            .init(title: "Lire l'article sur les serveurs MCP"),
+        ]
+        for draft in drafts { store.add(draft) }
+        if let id = store.tasks.first(where: { $0.title.hasPrefix("Relire") })?.id {
+            store.edit(id) { $0.checklist = [ChecklistItem(title: "Listes", done: true), ChecklistItem(title: "Saisie rapide")] }
+        }
+        store.setProjectFolder(maxwell.id, to: NSHomeDirectory() + "/Maxwell")
+        if let id = store.tasks.first(where: { $0.title.hasPrefix("Relire https") })?.id {
+            store.setClaude(ClaudeTrace(startedAt: Date(), session: "demo", state: .done, result: """
+                La PR ajoute l'export CSV du Récap. Le code est correct et les 4 nouveaux tests passent.
+                Reste : la colonne « Site » est vide pour les apps hors navigateur, à confirmer.
+                À vérifier par toi : le séparateur, point-virgule ou virgule, selon ton tableur.
+                """), for: id)
+        }
+        let done = store.add(.init(title: "Corriger le bug de la Secousse", projectID: maxwell.id, when: day(0)))
+        store.close(done.id)
+    }
 }
 
 /// Générateur pseudo-aléatoire déterministe : les captures restent identiques d'une fois sur l'autre.

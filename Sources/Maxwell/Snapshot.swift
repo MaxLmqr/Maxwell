@@ -22,6 +22,7 @@ enum Snapshot {
         DemoData.fill(db, now: now)
 
         let model = AppModel(db: db, live: false)
+        DemoData.fillTasks(model.tasks)
         model.tracker.simulateCurrentApp("Xcode")
         model.tracker.simulateNow(now)
         let categoryID = { (name: String) in db.categories().first { $0.name == name }?.id }
@@ -48,25 +49,49 @@ enum Snapshot {
 
             renderView(model.inject(MenuBarView()), appearance: appearance,
                        to: folder.appendingPathComponent("menu-\(suffix).png"))
-            for period in Period.allCases {
-                model.navigation.period = period
-                model.navigation.referenceDate = now
-                renderWindow(name: "Récap", size: Windows.recapSize, content: model.inject(RecapView()),
-                             showsTitle: false, appearance: appearance,
-                             to: folder.appendingPathComponent("recap-\(period.fileName)-\(suffix).png"))
-            }
-            model.navigation.period = .week
-            // Plus haute que la fenêtre réelle, pour voir le détail de Navigation en entier.
-            renderWindow(name: "Récap", size: NSSize(width: Windows.recapSize.width, height: 1100),
-                         content: model.inject(RecapView(previewExpanded: categoryID("Navigation"))),
-                         showsTitle: false, appearance: appearance, to: folder.appendingPathComponent("recap-detail-\(suffix).png"))
-            renderWindow(name: "Récap", size: Windows.recapSize,
-                         content: model.inject(RecapView(previewHovered: categoryID("IA"))),
-                         showsTitle: false, appearance: appearance, to: folder.appendingPathComponent("recap-survol-\(suffix).png"))
+            renderView(model.inject(QuickEntryPreview()), appearance: appearance,
+                       to: folder.appendingPathComponent("saisie-rapide-\(suffix).png"))
             renderWindow(name: "Catégories", size: Windows.categoriesSize,
                          content: model.inject(CategoriesView(initialSelection: categoryID("Navigation"))),
                          appearance: appearance, to: folder.appendingPathComponent("categories-\(suffix).png"))
         }
+        // La fenêtre Maxwell est toujours sombre : une seule série.
+        model.mainNavigation.module = .time
+        for period in Period.allCases {
+            model.navigation.period = period
+            model.navigation.referenceDate = now
+            renderMain(model.inject(MaxwellView()), to: folder.appendingPathComponent("temps-\(period.fileName).png"))
+        }
+        model.navigation.period = .week
+        renderMain(model.inject(MaxwellView(recap: RecapView(previewExpanded: categoryID("Navigation")))),
+                   height: 1000, to: folder.appendingPathComponent("temps-detail.png"))
+        renderMain(model.inject(MaxwellView(recap: RecapView(previewHovered: categoryID("IA")))),
+                   to: folder.appendingPathComponent("temps-survol.png"))
+        model.mainNavigation.module = .tasks
+        for (name, list) in [("aujourdhui", TaskList.today), ("a-venir", .upcoming), ("reception", .inbox)] {
+            model.taskNavigation.selection = list
+            renderMain(model.inject(MaxwellView()), to: folder.appendingPathComponent("taches-\(name).png"))
+        }
+        model.taskNavigation.selection = .today
+        let relire = model.tasks.tasks.first { $0.title.hasPrefix("Relire") }?.id
+        model.taskNavigation.selectedTask = relire
+        model.taskNavigation.expanded = relire
+        renderMain(model.inject(MaxwellView()), to: folder.appendingPathComponent("taches-edition.png"))
+
+        // Le pont avec Claude : le compte rendu dans la Tâche dépliée, la confirmation avant de lancer, le choix du Projet.
+        let viaClaude = model.tasks.tasks.first { $0.claude != nil }?.id
+        model.taskNavigation.selectedTask = viaClaude
+        model.taskNavigation.expanded = viaClaude
+        renderMain(model.inject(MaxwellView()), to: folder.appendingPathComponent("taches-claude.png"))
+        model.taskNavigation.expanded = nil
+        model.taskNavigation.selectedTask = relire
+        model.taskNavigation.launcher = relire.map { .init(taskID: $0) }
+        renderMain(model.inject(MaxwellView()), to: folder.appendingPathComponent("taches-confier.png"))
+        model.taskNavigation.launcher = nil
+        model.taskNavigation.picker = relire.map { .init(taskID: $0) }
+        renderMain(model.inject(MaxwellView()), to: folder.appendingPathComponent("taches-projet.png"))
+        model.taskNavigation.picker = nil
+
         print("✅ Captures dans \(folder.path)")
         exit(0)
     }
@@ -112,10 +137,23 @@ enum Snapshot {
 
     /// Une fenêtre complète, barre d'outils comprise, rendue invisible pendant la capture.
     private static func renderWindow<V: View>(name: String, size: NSSize, content: V, showsTitle: Bool = true,
+                                              fullSizeContent: Bool = false,
                                               appearance: NSAppearance.Name, to url: URL) {
         let window = Windows.makeWindow(name: name, size: size, content: content,
-                                        showsTitle: showsTitle, autosave: false)
+                                        showsTitle: showsTitle, autosave: false, fullSizeContent: fullSizeContent)
         window.appearance = NSAppearance(named: appearance)
+        show(window)
+        if let frame = window.contentView?.superview {
+            frame.layoutSubtreeIfNeeded()
+            capture(frame, to: url)
+        }
+        window.orderOut(nil)
+    }
+
+    /// La fenêtre Maxwell, avec sa barre des modules.
+    private static func renderMain<V: View>(_ content: V, height: CGFloat? = nil, to url: URL) {
+        let window = Windows.makeMainWindow(content: content, autosave: false)
+        if let height { window.setContentSize(NSSize(width: Windows.mainSize.width, height: height)) }
         show(window)
         if let frame = window.contentView?.superview {
             frame.layoutSubtreeIfNeeded()
