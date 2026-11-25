@@ -87,7 +87,7 @@ La date limite d'une Tâche, distincte de son Quand.
 _Avoid_: Deadline, date due
 
 **Boîte de réception**:
-La liste des Tâches Ouvertes sans Projet ni Quand, qui restent à ranger.
+La liste des Tâches Ouvertes sans Quand, avec ou sans Projet : elles n'ont pas encore de jour.
 _Avoid_: Inbox, entrée
 
 **Aujourd'hui**:

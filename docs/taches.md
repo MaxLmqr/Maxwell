@@ -41,13 +41,13 @@ Le texte tapé est lu pour en extraire, s'ils y sont :
 | `#Maxwell` | Projet (complété au fur et à mesure ; un nom inconnu crée le Projet) |
 | `!` en fin de titre | Drapeau |
 
-Ce que Maxwell a compris s'affiche en pastilles sous le champ pendant la frappe, et ces mots sont retirés du titre. Les dates ne sont lues qu'en fin de ligne, et jamais après « de », « du » ou « des » : « Préparer la réunion de demain » reste un titre. Une Tâche sans Projet ni Quand arrive dans la Boîte de réception.
+Ce que Maxwell a compris s'affiche en pastilles sous le champ pendant la frappe, et ces mots sont retirés du titre. Les dates ne sont lues qu'en fin de ligne, et jamais après « de », « du » ou « des » : « Préparer la réunion de demain » reste un titre. Une Tâche sans Quand arrive dans la Boîte de réception, même rangée dans un Projet.
 
 ## Les listes
 
 | Liste | Contenu |
 |---|---|
-| **Boîte de réception** | Tâches Ouvertes sans Projet ni Quand : ce qui reste à ranger. |
+| **Boîte de réception** | Tâches Ouvertes sans Quand, avec ou sans Projet : ce qui n'a pas encore de jour. |
 | **Aujourd'hui** | Tâches Ouvertes dont le Quand est aujourd'hui ou passé, ou dont l'Échéance est aujourd'hui ou passée. |
 | **À venir** | Tâches Ouvertes avec un Quand ou une Échéance futurs, groupées par jour. |
 | **Un jour** | Tâches Ouvertes dont le Quand vaut « Un jour ». |
@@ -83,7 +83,7 @@ Les Tâches sont un des deux modules de la fenêtre Maxwell, à côté du Temps 
 
 ## Projets
 
-Un Projet est un nom, et rien d'autre en v1 : ni sous-projet, ni date, ni dossier. On le crée depuis la barre latérale ou en tapant un `#nom` inconnu, on le renomme ou l'archive d'un clic droit. Archivé, il quitte la barre latérale et ses Tâches encore Ouvertes perdent leur Projet : sans Quand, elles reviennent dans la Boîte de réception.
+Un Projet est un nom, et rien d'autre en v1 : ni sous-projet, ni date, ni dossier. On le crée depuis la barre latérale ou en tapant un `#nom` inconnu, on le renomme ou l'archive d'un clic droit. Archivé, il quitte la barre latérale et ses Tâches encore Ouvertes perdent leur Projet ; sans Quand, elles restent dans la Boîte de réception.
 
 Un Projet n'est pas une Catégorie : la Catégorie classe le temps passé dans les Apps et les Sites, le Projet regroupe des Tâches.
 

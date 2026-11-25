@@ -33,7 +33,7 @@ final class MCPTools {
     static let definitions: [[String: Any]] = [
         tool("list_tasks", "Liste les tâches \(Owner.ofName). Sans argument : celles d'aujourd'hui.", [
             "list": ["type": "string", "enum": ["today", "upcoming", "inbox", "someday", "history"],
-                     "description": "today : à faire aujourd'hui ou en retard. upcoming : prévues plus tard. inbox : pas encore rangées. someday : un jour. history : faites ou annulées."],
+                     "description": "today : à faire aujourd'hui ou en retard. upcoming : prévues plus tard. inbox : sans date prévue, avec ou sans projet. someday : un jour. history : faites ou annulées."],
             "project": ["type": "string", "description": "Nom d'un projet : ses tâches ouvertes. Remplace `list`."],
         ]),
         tool("add_task", "Crée une tâche.", [

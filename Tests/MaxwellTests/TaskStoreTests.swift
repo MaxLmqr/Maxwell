@@ -34,11 +34,11 @@ final class TaskStoreTests {
         #expect(today == Day(year: 2026, month: 11, day: 25))
     }
 
-    @Test func aTaskWithoutProjectNorWhenLandsInTheInbox() {
+    @Test func aTaskWithoutWhenLandsInTheInboxEvenInAProject() {
         store.add(text: "Acheter du pain")
         store.add(text: "Appeler Paul demain")
         store.add(text: "Devis #Ventes")
-        #expect(titles(.inbox) == ["Acheter du pain"])
+        #expect(titles(.inbox) == ["Devis", "Acheter du pain"])
         #expect(titles(.upcoming) == ["Appeler Paul"])
         #expect(titles(.project(store.projects[0].id)) == ["Devis"])
     }
@@ -51,7 +51,7 @@ final class TaskStoreTests {
         #expect(titles(.today) == ["Courses"])
         #expect(titles(.someday) == ["Piano"])
         #expect(titles(.project(ventes.id)) == ["Devis"])
-        #expect(titles(.inbox).isEmpty)
+        #expect(titles(.inbox) == ["Devis"])
     }
 
     @Test func projectsAreFoundWhateverTheCase() {

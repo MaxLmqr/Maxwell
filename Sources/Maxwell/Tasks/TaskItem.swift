@@ -275,7 +275,8 @@ extension TaskItem {
         switch list {
         case .history: return !isOpen
         case _ where !isOpen: return false
-        case .inbox: return projectID == nil && when == nil
+        // Sans Quand, même rangée dans un Projet : la Tâche n'a pas encore de jour.
+        case .inbox: return when == nil
         case .today: return isDue(today: today)
         case .upcoming: return upcomingDay(today: today) != nil
         case .someday: return when == .someday && !isDue(today: today)
