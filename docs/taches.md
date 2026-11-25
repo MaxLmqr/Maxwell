@@ -139,6 +139,8 @@ La session apparaît aussi dans `claude agents`, sous le titre de la Tâche et r
 
 Dans la Tâche dépliée : « arrêter » pendant le travail ; ensuite « reprendre dans le terminal », qui ouvre la session dans Ghostty s'il est installé, sinon dans Terminal (`claude attach`, la commande est aussi copiée), « ouvrir dans Claude Desktop », qui arrête la session dans `claude agents` puis l'ajoute à la liste de Claude Desktop pour la poursuivre là-bas (`claude --desktop --resume`, seulement si Claude Desktop est installé), et « relancer ».
 
+Une session ouverte à la main (dans le terminal, ou par une autre app) se relie à une Tâche : l'icône lien de la Tâche dépliée liste les sessions de `claude agents`, la plus récente d'abord, et « Détacher la session » l'en retire sans l'arrêter. Maxwell la suit ensuite comme les autres ; « reprendre dans le terminal » repart du dossier où elle a été ouverte. Une session finie ne coche jamais la Tâche : son compte rendu s'affiche, et Max coche après relecture.
+
 **Ce que Claude peut faire seul** se règle dans ⚙︎ → « Claude peut… », car Max ne regarde pas forcément la session pendant qu'elle travaille :
 
 | Réglage | Effet |

@@ -9,6 +9,8 @@ struct TaskEditor: View {
     @State private var task: TaskItem
     @State private var newItem = ""
     @State private var showsChecklist: Bool
+    /// Les sessions de `claude agents`, lues quand la Tâche se déplie, pour « relier une session ».
+    @State private var sessions: [ClaudeRunner.Session] = []
     @FocusState private var titleFocused: Bool
     var onClose: () -> Void
 
@@ -69,6 +71,7 @@ struct TaskEditor: View {
         }
         .onExitCommand(perform: onClose)
         .onAppear { titleFocused = true }
+        .task { sessions = await claude.sessions() }
     }
 
     /// Ce que Claude a fait de la Tâche : l'étape en cours, puis son compte rendu, et de quoi reprendre la session.
@@ -193,6 +196,9 @@ struct TaskEditor: View {
                 if task.repetition == nil {
                     repetitionMenu { IconButtonLabel(symbol: "repeat", help: "Répéter") }
                 }
+                if !claude.isRunning(task.id), !sessions.isEmpty || store.task(task.id)?.claude != nil {
+                    sessionMenu
+                }
                 if !showsChecklist {
                     Button { showsChecklist = true } label: { IconButtonLabel(symbol: "checklist", help: "Checklist") }
                         .buttonStyle(.plain)
@@ -213,6 +219,40 @@ struct TaskEditor: View {
             }
         }
         .font(.system(size: 11))
+    }
+
+    /// Relie à la Tâche une session de `claude agents`, par exemple ouverte à la main dans le terminal.
+    private var sessionMenu: some View {
+        let linked = store.task(task.id)?.claude?.session
+        return Menu {
+            Section("Relier une session Claude") {
+                ForEach(sessions.prefix(15)) { session in
+                    Button {
+                        claude.link(task.id, session: session.id)
+                    } label: {
+                        Text(Self.label(for: session))
+                    }
+                    .disabled(session.id == linked)
+                }
+            }
+            if linked != nil {
+                Divider()
+                Button("Détacher la session") { claude.unlink(task.id) }
+            }
+        } label: {
+            IconButtonLabel(symbol: "link", help: "Relier une session Claude")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    /// « Le titre — Maxwell · il y a 2 h », avec un point si la session tourne encore.
+    static func label(for session: ClaudeRunner.Session) -> String {
+        let folder = URL(fileURLWithPath: session.folder).lastPathComponent
+        let age = RelativeDateTimeFormatter().localizedString(for: session.startedAt, relativeTo: Date())
+        return "\(session.live ? "● " : "")\(session.name.prefix(50)) — \(folder) · \(age)"
     }
 
     private func projectMenu<Label: View>(@ViewBuilder label: () -> Label) -> some View {

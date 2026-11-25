@@ -31,7 +31,7 @@ final class MCPTools {
     // MARK: - Description des outils
 
     static let definitions: [[String: Any]] = [
-        tool("list_tasks", "Liste les tâches de Max. Sans argument : celles d'aujourd'hui.", [
+        tool("list_tasks", "Liste les tâches \(Owner.ofName). Sans argument : celles d'aujourd'hui.", [
             "list": ["type": "string", "enum": ["today", "upcoming", "inbox", "someday", "history"],
                      "description": "today : à faire aujourd'hui ou en retard. upcoming : prévues plus tard. inbox : pas encore rangées. someday : un jour. history : faites ou annulées."],
             "project": ["type": "string", "description": "Nom d'un projet : ses tâches ouvertes. Remplace `list`."],
@@ -40,7 +40,7 @@ final class MCPTools {
             "title": ["type": "string"],
             "note": ["type": "string"],
             "project": ["type": "string", "description": "Nom du projet ; créé s'il n'existe pas."],
-            "when": ["type": "string", "description": "Jour où Max compte s'y mettre : AAAA-MM-JJ, today, tomorrow ou someday."],
+            "when": ["type": "string", "description": "Jour où \(Owner.name) compte s'y mettre : AAAA-MM-JJ, today, tomorrow ou someday."],
             "deadline": ["type": "string", "description": "Date limite, AAAA-MM-JJ."],
             "flagged": ["type": "boolean"],
         ], required: ["title"]),
@@ -61,8 +61,8 @@ final class MCPTools {
             "id": ["type": "integer"],
             "text": ["type": "string"],
         ], required: ["id", "text"]),
-        tool("list_projects", "Liste les projets de Max, avec leur dossier de travail et leur nombre de tâches ouvertes.", [:]),
-        tool("get_time_recap", "Le temps actif de Max sur son Mac pour un jour, une semaine ou un mois : total, comparaison avec la période précédente, et détail par catégorie, par app et par site.", [
+        tool("list_projects", "Liste les projets \(Owner.ofName), avec leur dossier de travail et leur nombre de tâches ouvertes.", [:]),
+        tool("get_time_recap", "Le temps actif \(Owner.ofName) sur son Mac pour un jour, une semaine ou un mois : total, comparaison avec la période précédente, et détail par catégorie, par app et par site.", [
             "period": ["type": "string", "enum": ["day", "week", "month"]],
             "date": ["type": "string", "description": "Un jour de la période, AAAA-MM-JJ. Par défaut aujourd'hui."],
         ]),

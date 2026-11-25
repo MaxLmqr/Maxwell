@@ -107,7 +107,7 @@ final class ClaudeRunner: ObservableObject {
 
     /// La demande envoyée à Claude : la Tâche telle que Max l'a écrite, puis ce qu'on attend en retour.
     static func prompt(for task: TaskItem, project: Project?, extra: String) -> String {
-        var lines = ["Tâche n° \(task.id) de la liste de tâches de Max (Maxwell) : \(task.title)"]
+        var lines = ["Tâche n° \(task.id) de la liste de tâches \(Owner.ofName) (Maxwell) : \(task.title)"]
         if let project { lines.append("Projet : \(project.name)") }
         if let deadline = task.deadline { lines.append("Échéance : \(deadline)") }
         if !task.note.isEmpty { lines.append("\nNote :\n\(task.note)") }
@@ -116,13 +116,13 @@ final class ClaudeRunner: ObservableObject {
             lines += task.checklist.map { "- [\($0.done ? "x" : " ")] \($0.title)" }
         }
         let extra = extra.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !extra.isEmpty { lines.append("\nPrécision de Max :\n\(extra)") }
+        if !extra.isEmpty { lines.append("\nPrécision \(Owner.ofName) :\n\(extra)") }
         lines.append("""
 
-            Fais ce travail. Max peut suivre cette session dans `claude agents`, mais il ne la regarde pas \
-            forcément : si une décision lui revient, ne tranche pas à sa place, arrête-toi et dis laquelle.
-            Termine par un compte rendu court, en français : ce qui est fait, ce qui reste, et ce que Max \
-            doit vérifier. Ne coche pas la tâche : Max le fera après avoir relu.
+            Fais ce travail. \(Owner.name) peut suivre cette session dans `claude agents`, sans forcément \
+            la regarder : si une décision lui revient, ne tranche pas à sa place, arrête-toi et dis laquelle.
+            Termine par un compte rendu court, en français : ce qui est fait, ce qui reste, et ce que \(Owner.name) \
+            doit vérifier. Ne coche pas la tâche : \(Owner.name) le fera après avoir relu.
             """)
         return lines.joined(separator: "\n")
     }
@@ -214,6 +214,81 @@ final class ClaudeRunner: ObservableObject {
             _ = ClaudeRunner.run(claude, ["stop", ClaudeRunner.shortID(session)], in: nil)
             await MainActor.run { [weak self] in self?.poll(force: true) }
         }
+    }
+
+    // MARK: - Relier
+
+    /// Une session de `claude agents` que Max peut relier à une Tâche, y compris une session ouverte à la main.
+    struct Session: Identifiable, Equatable {
+        let id: String
+        var name: String
+        var folder: String
+        var startedAt: Date
+        /// La session tourne encore (elle a un statut dans `claude agents`).
+        var live: Bool
+    }
+
+    /// Les sessions que liste `claude agents`, les plus récentes d'abord.
+    nonisolated static func parseSessions(_ data: Data) -> [Session] {
+        guard let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+        return list.compactMap { entry -> Session? in
+            guard let id = entry["sessionId"] as? String else { return nil }
+            let folder = entry["cwd"] as? String ?? ""
+            let name = (entry["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                ?? URL(fileURLWithPath: folder).lastPathComponent
+            let started = (entry["startedAt"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) } ?? .distantPast
+            return Session(id: id, name: name, folder: folder, startedAt: started, live: entry["status"] != nil)
+        }
+        .sorted { $0.startedAt > $1.startedAt }
+    }
+
+    /// Les sessions qu'on peut relier, lues hors du fil principal.
+    func sessions() async -> [Session] {
+        await Task.detached {
+            guard let claude = ClaudeRunner.claudePath() else { return [] }
+            let result = ClaudeRunner.run(claude, ["agents", "--json", "--all"], in: nil, mergeErrors: false)
+            return result.status == 0 ? ClaudeRunner.parseSessions(Data(result.output.utf8)) : []
+        }.value
+    }
+
+    /// Relie une session existante à la Tâche : Maxwell la suit ensuite comme s'il l'avait lancée.
+    /// La Tâche n'est pas cochée quand la session finit : c'est à Max de le faire après relecture.
+    func link(_ id: TaskID, session: String) {
+        guard store.task(id) != nil, !launching.contains(id) else { return }
+        stopping.remove(id)
+        activity[id] = nil
+        store.setClaude(ClaudeTrace(startedAt: Date(), session: session, state: .running, result: nil), for: id)
+        poll(force: true)
+    }
+
+    /// Détache la session de la Tâche, sans l'arrêter.
+    func unlink(_ id: TaskID) {
+        guard !launching.contains(id) else { return }
+        stopping.remove(id)
+        activity[id] = nil
+        store.setClaude(nil, for: id)
+    }
+
+    /// Le dossier où la session a été ouverte, d'après sa conversation : une session reliée à la main
+    /// ne tourne pas forcément dans le dossier du Projet, et `claude --resume` doit partir du bon dossier.
+    nonisolated static func folder(in transcript: Data) -> String? {
+        for line in transcript.split(separator: 0x0A).reversed() {
+            if let entry = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+               let cwd = entry["cwd"] as? String, !cwd.isEmpty {
+                return cwd
+            }
+        }
+        return nil
+    }
+
+    /// Le dossier de la session, sinon celui de la Tâche.
+    func sessionFolder(for task: TaskItem) -> URL {
+        if let session = task.claude?.session, !session.isEmpty,
+           let cwd = Self.transcriptURL(session: session).flatMap(Self.tail).flatMap(Self.folder(in:)),
+           FileManager.default.fileExists(atPath: cwd) {
+            return URL(fileURLWithPath: cwd, isDirectory: true)
+        }
+        return folder(for: task)
     }
 
     /// L'identifiant court d'une session, celui que prennent `claude attach` et `claude stop`.
@@ -310,7 +385,7 @@ final class ClaudeRunner: ObservableObject {
             guard trace.state == .running else { return (next, nil) }
             if stopping {
                 next.state = .failed
-                next.result = ["Arrêtée par Max.", transcript?.lastText].compactMap { $0 }.joined(separator: "\n\n")
+                next.result = ["Arrêtée depuis Maxwell.", transcript?.lastText].compactMap { $0 }.joined(separator: "\n\n")
             } else if transcript?.answered == true {
                 done()
             } else {
@@ -446,7 +521,7 @@ final class ClaudeRunner: ObservableObject {
     /// sinon `claude --resume` (les sessions lancées par d'anciennes versions de Maxwell).
     func resumeCommand(for task: TaskItem) -> String? {
         guard let session = task.claude?.session, !session.isEmpty else { return nil }
-        let folder = folder(for: task).path.replacingOccurrences(of: "'", with: "'\\''")
+        let folder = sessionFolder(for: task).path.replacingOccurrences(of: "'", with: "'\\''")
         return "cd '\(folder)' && { claude attach \(Self.shortID(session)) || claude --resume \(session); }"
     }
 
@@ -502,7 +577,7 @@ final class ClaudeRunner: ObservableObject {
     func openInDesktop(_ task: TaskItem) {
         guard let session = task.claude?.session, !session.isEmpty, task.claude?.state != .running,
               let claude = Self.claudePath() else { return }
-        let folder = folder(for: task)
+        let folder = sessionFolder(for: task)
         Task.detached {
             _ = ClaudeRunner.run(claude, ["stop", ClaudeRunner.shortID(session)], in: nil)
             let result = ClaudeRunner.run("/usr/bin/script",

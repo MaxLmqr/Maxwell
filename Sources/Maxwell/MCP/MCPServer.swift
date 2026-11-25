@@ -50,9 +50,9 @@ final class MCPServer {
                 "capabilities": ["tools": [String: Any]()],
                 "serverInfo": ["name": "maxwell", "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"],
                 "instructions": """
-                    Maxwell est l'assistant personnel de Max sur son Mac : sa liste de tâches et le temps \
-                    qu'il passe dans chaque app et sur chaque site. Les dates sont au format AAAA-MM-JJ. \
-                    Ne coche une tâche que si Max le demande ou si le travail demandé est vraiment fini ; \
+                    Maxwell est l'assistant personnel \(Owner.ofName) sur son Mac : sa liste de tâches et le temps \
+                    passé dans chaque app et sur chaque site. Les dates sont au format AAAA-MM-JJ. \
+                    Ne coche une tâche que si \(Owner.name) le demande ou si le travail demandé est vraiment fini ; \
                     pour rendre compte d'un travail, utilise annotate_task.
                     """,
             ])

@@ -272,9 +272,10 @@ enum Windows {
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         // La barre latérale monte jusque sous les boutons de la fenêtre, comme dans Finder ou Mail.
         if fullSizeContent { window.styleMask.insert(.fullSizeContentView) }
-        // La fenêtre vient sur le bureau où est Max, même devant une app en plein écran,
-        // au lieu de faire basculer le Mac vers le bureau où elle a été ouverte la première fois.
-        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        // La fenêtre vient sur le bureau où l'on est, au lieu de faire basculer le Mac vers celui où elle a été
+        // ouverte la première fois. Pas devant une app en plein écran : c'est une fenêtre de travail, qui
+        // resterait posée dessus ; macOS bascule alors vers un bureau normal pour l'afficher.
+        window.collectionBehavior = [.moveToActiveSpace]
         window.toolbarStyle = .unified
         window.title = name
         window.titleVisibility = showsTitle ? .visible : .hidden

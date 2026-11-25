@@ -80,11 +80,11 @@ final class ClaudeBridgeTests {
         task.note = "Voir le fil https://exemple.slack.com/x"
         task.checklist = [ChecklistItem(title: "Reproduire", done: true), ChecklistItem(title: "Corriger")]
         let prompt = ClaudeRunner.prompt(for: task, project: project, extra: "  sans toucher aux tests ")
-        #expect(prompt.hasPrefix("Tâche n° \(task.id) de la liste de tâches de Max (Maxwell) : Corriger le bip"))
+        #expect(prompt.hasPrefix("Tâche n° \(task.id) de la liste de tâches \(Owner.ofName) (Maxwell) : Corriger le bip"))
         #expect(prompt.contains("Projet : Maxwell"))
         #expect(prompt.contains("https://exemple.slack.com/x"))
         #expect(prompt.contains("- [x] Reproduire\n- [ ] Corriger"))
-        #expect(prompt.contains("Précision de Max :\nsans toucher aux tests"))
+        #expect(prompt.contains("Précision \(Owner.ofName) :\nsans toucher aux tests"))
         #expect(prompt.contains("Ne coche pas la tâche"))
     }
 
@@ -185,6 +185,32 @@ final class ClaudeBridgeTests {
         #expect(agents.count == 3)
     }
 
+    @Test func namesThePersonWhoUsesTheMac() {
+        #expect(Owner.firstName(of: "Camille Martin") == "Camille")
+        #expect(Owner.firstName(of: "  ") == nil)
+        #expect(!Owner.name.isEmpty)
+    }
+
+    @Test func listsTheSessionsMaxCanLink() {
+        let json = """
+            [{"cwd":"/Users/x/Maxwell","kind":"interactive","startedAt":2000,"sessionId":"aaa","name":"Tâches","status":"busy"},
+             {"cwd":"/Users/x/site","kind":"background","startedAt":3000,"sessionId":"bbb","state":"stopped"}]
+            """
+        let sessions = ClaudeRunner.parseSessions(Data(json.utf8))
+        #expect(sessions.map(\.id) == ["bbb", "aaa"])
+        #expect(sessions[0].name == "site")
+        #expect(sessions[0].live == false)
+        #expect(sessions[1].live == true)
+        #expect(sessions[1].startedAt == Date(timeIntervalSince1970: 2))
+    }
+
+    @Test func findsTheFolderOfALinkedSession() {
+        let lines = [line(["type": "user", "cwd": "/Users/x/Maxwell", "message": ["content": "Bonjour"]]),
+                     line(["type": "summary"])]
+        #expect(ClaudeRunner.folder(in: Data(lines.joined(separator: "\n").utf8)) == "/Users/x/Maxwell")
+        #expect(ClaudeRunner.folder(in: Data()) == nil)
+    }
+
     private func line(_ object: [String: Any]) -> String {
         MCPServer.encode(object)
     }
@@ -230,10 +256,10 @@ final class ClaudeBridgeTests {
         let done = ClaudeTrace(startedAt: Date(), session: "s", state: .done, result: "C'est corrigé.")
         (trace, _) = ClaudeRunner.reconcile(done, agent: busy, transcript: working, stopping: false)
         #expect(trace.state == .running)
-        // Arrêtée par Max.
+        // Arrêtée depuis Maxwell.
         (trace, _) = ClaudeRunner.reconcile(running, agent: ClaudeRunner.Agent(status: nil, state: "stopped"),
                                             transcript: working, stopping: true)
-        #expect(trace.state == .failed && trace.result?.hasPrefix("Arrêtée par Max.") == true)
+        #expect(trace.state == .failed && trace.result?.hasPrefix("Arrêtée depuis Maxwell.") == true)
         // Disparue sans réponse.
         (trace, _) = ClaudeRunner.reconcile(running, agent: nil, transcript: nil, stopping: false)
         #expect(trace.state == .failed)
