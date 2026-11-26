@@ -88,6 +88,16 @@ final class TaskStoreTests {
         #expect(titles(.today) == ["Courses"])
     }
 
+    @Test func aTaskTickedYesterdayLeavesTheListEvenIfItStayedOpen() throws {
+        var now = Self.wednesday
+        let store = TaskStore(db: try Database(url: url), calendar: calendar, clock: { now })
+        let task = store.add(text: "Supprimer la table", in: .today)!
+        store.close(task.id)
+        #expect(store.tasks(in: .today, keeping: [task.id]).map(\.title) == ["Supprimer la table"])
+        now = now.addingTimeInterval(86400)
+        #expect(store.tasks(in: .today, keeping: [task.id]).isEmpty)
+    }
+
     @Test func cancelledTasksGoToHistoryToo() {
         let task = store.add(text: "Réunion annulée", in: .today)!
         store.close(task.id, as: .cancelled)

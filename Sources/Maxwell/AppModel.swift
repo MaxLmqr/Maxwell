@@ -144,6 +144,8 @@ enum Windows {
     static func showTasks(_ list: TaskList? = nil) {
         let navigation = AppModel.shared.taskNavigation
         navigation.selection = list ?? .today
+        // Rouvrir la fenêtre, c'est repartir d'une liste propre : les Tâches cochées avant n'y restent pas.
+        navigation.justClosed = []
         let firstOpening = main == nil
         show(.tasks)
         if list == nil {

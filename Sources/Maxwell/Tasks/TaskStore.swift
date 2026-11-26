@@ -50,10 +50,15 @@ final class TaskStore: ObservableObject {
 
     func tasks(in list: TaskList, keeping kept: Set<TaskID> = []) -> [TaskItem] {
         let today = today
-        // Une Tâche cochée à l'instant reste à sa place, barrée, le temps de se rattraper.
+        // Une Tâche cochée à l'instant reste à sa place, barrée, le temps de se rattraper ;
+        // le jour même seulement : une fenêtre restée ouverte ne la garde pas jusqu'au lendemain.
         guard list != .history, !kept.isEmpty else { return tasks.inList(list, today: today) }
         let byID = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
-        return tasks.map { kept.contains($0.id) && !$0.isOpen ? $0.reopenedForDisplay : $0 }
+        func keeps(_ task: TaskItem) -> Bool {
+            guard kept.contains(task.id), !task.isOpen, let closedAt = task.closedAt else { return false }
+            return Day(closedAt, calendar: calendar) == today
+        }
+        return tasks.map { keeps($0) ? $0.reopenedForDisplay : $0 }
             .inList(list, today: today)
             .map { byID[$0.id]! }
     }
