@@ -138,7 +138,7 @@ final class TaskNavigation: ObservableObject {
 
     /// Les Tâches de la liste montrée, dans l'ordre de l'écran.
     func visible(in store: TaskStore) -> [TaskItem] {
-        store.tasks(in: selection, keeping: justClosed)
+        store.tasks(in: selection, keeping: justClosed, withDoneToday: true)
     }
 
     /// Applique une touche. Renvoie false si elle ne veut rien dire ici, pour la laisser passer.

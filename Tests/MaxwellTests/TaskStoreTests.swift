@@ -98,6 +98,26 @@ final class TaskStoreTests {
         #expect(store.tasks(in: .today, keeping: [task.id]).isEmpty)
     }
 
+    @Test func todayCanShowTheTasksDoneTodayBelowTheOpenOnes() throws {
+        var now = Self.wednesday
+        let store = TaskStore(db: try Database(url: url), calendar: calendar, clock: { now })
+        let first = store.add(text: "Courses", in: .today)!
+        let second = store.add(text: "Banque", in: .today)!
+        store.add(text: "Rapport", in: .today)
+        store.add(text: "Archives", in: .inbox)
+        let dropped = store.add(text: "Réunion", in: .today)!
+        store.close(first.id)
+        now = now.addingTimeInterval(60)
+        store.close(second.id)
+        store.close(dropped.id, as: .cancelled)
+        #expect(store.tasks(in: .today).map(\.title) == ["Rapport"])
+        #expect(store.tasks(in: .today, withDoneToday: true).map(\.title) == ["Rapport", "Courses", "Banque"])
+        #expect(store.tasks(in: .today, keeping: [second.id], withDoneToday: true).map(\.title)
+                == ["Rapport", "Banque", "Courses"])
+        now = now.addingTimeInterval(86400)
+        #expect(store.tasks(in: .today, withDoneToday: true).map(\.title) == ["Rapport"])
+    }
+
     @Test func cancelledTasksGoToHistoryToo() {
         let task = store.add(text: "Réunion annulée", in: .today)!
         store.close(task.id, as: .cancelled)

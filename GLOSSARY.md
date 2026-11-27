@@ -91,7 +91,7 @@ La liste des Tâches Ouvertes sans Quand, avec ou sans Projet : elles n'ont pas 
 _Avoid_: Inbox, entrée
 
 **Aujourd'hui**:
-La liste des Tâches Ouvertes dont le Quand ou l'Échéance est aujourd'hui ou passé. Elle est calculée, jamais remplie à la main.
+La liste des Tâches Ouvertes dont le Quand ou l'Échéance est aujourd'hui ou passé. Elle est calculée, jamais remplie à la main. La fenêtre Tâches y ajoute en bas, barrées, les Tâches Faites dans la journée.
 _Avoid_: Ma journée, focus
 
 **Historique**:

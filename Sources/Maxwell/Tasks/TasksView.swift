@@ -178,7 +178,7 @@ struct TasksView: View {
     // MARK: - Liste choisie
 
     private var detail: some View {
-        let tasks = store.tasks(in: selection, keeping: justClosed)
+        let tasks = store.tasks(in: selection, keeping: justClosed, withDoneToday: true)
         return VStack(alignment: .leading, spacing: 0) {
             header
                 .padding(.horizontal, 22)

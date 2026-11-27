@@ -48,7 +48,7 @@ Ce que Maxwell a compris s'affiche en pastilles sous le champ pendant la frappe,
 | Liste | Contenu |
 |---|---|
 | **Boîte de réception** | Tâches Ouvertes sans Quand, avec ou sans Projet : ce qui n'a pas encore de jour. |
-| **Aujourd'hui** | Tâches Ouvertes dont le Quand est aujourd'hui ou passé, ou dont l'Échéance est aujourd'hui ou passée. |
+| **Aujourd'hui** | Tâches Ouvertes dont le Quand est aujourd'hui ou passé, ou dont l'Échéance est aujourd'hui ou passée. Dessous, barrées, les Tâches Faites dans la journée. |
 | **À venir** | Tâches Ouvertes avec un Quand ou une Échéance futurs, groupées par jour. |
 | **Un jour** | Tâches Ouvertes dont le Quand vaut « Un jour ». |
 | **Projet** | Toutes les Tâches Ouvertes du Projet. |
@@ -73,7 +73,7 @@ Les Tâches sont un des deux modules de la fenêtre Maxwell, à côté du Temps 
 
 ## Agir sur une Tâche
 
-- **Cocher** (clic sur la case, ou `x`) la rend Faite. Elle reste visible et barrée, pour pouvoir se rattraper, jusqu'à ce qu'on change de liste ou qu'on rouvre la fenêtre, et au plus tard jusqu'au soir ; puis elle part dans l'Historique.
+- **Cocher** (clic sur la case, ou `x`) la rend Faite. Elle reste visible et barrée, pour pouvoir se rattraper, jusqu'à ce qu'on change de liste ou qu'on rouvre la fenêtre, et au plus tard jusqu'au soir ; puis elle part dans l'Historique. Dans Aujourd'hui, elle descend sous les Tâches Ouvertes et y reste jusqu'au soir.
 - **Reporter**, d'un clic droit ou d'un raccourci : Demain, Ce week-end, Semaine prochaine, Un jour, ou une date.
 - **Annuler** : la Tâche quitte les listes sans compter comme faite, et reste dans l'Historique.
 - **Supprimer** : pour une Tâche créée par erreur. Clic droit → Supprimer, ⌫ sur la Tâche choisie, ou la corbeille de la Tâche dépliée. Un bandeau « Annuler » s'affiche 6 secondes. Une Tâche supprimée quitte aussi l'Historique.
